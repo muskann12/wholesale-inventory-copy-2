@@ -7,7 +7,7 @@ export default async function handler(req, res) {
   console.log('Login attempt:', email);
 
   // HARDCODED FALLBACK (works even if DB fails)
-if (email === 'inquiriesmanha786@gmail.com' && password === 'Manha@786') {
+if (email === 'shoukatcollection@gmail.com' && password === 'shoukatcollection@123*') {
   const token = createToken('hardcoded_user_id');
   setTokenCookie(res, token);
   return res.status(200).json({ success: true });
