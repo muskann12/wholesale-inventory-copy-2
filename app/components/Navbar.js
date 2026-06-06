@@ -41,7 +41,7 @@ export default function Navbar() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <img
             src="/brand.png"
-            alt="Manha Clothing Logo"
+            alt="Shaukat Collection Logo"
             width={48}
             height={48}
             style={{
@@ -56,7 +56,7 @@ export default function Navbar() {
             color: 'var(--text)',
             letterSpacing: '-0.02em',
             display: 'none',
-          }} className="hidden sm:inline">Manha Clothing</span>
+          }} className="hidden sm:inline">Shaukat Collection</span>
         </div>
 
         {/* Desktop Nav links */}

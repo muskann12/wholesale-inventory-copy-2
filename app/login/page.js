@@ -64,7 +64,7 @@ export default function LoginPage() {
           }}>
             <img 
               src="/brand.jpeg" 
-              alt="Manha Clothing" 
+              alt="Shaukat Collection" 
               style={{
                 height: '100px',
                 width: 'auto',
@@ -83,7 +83,7 @@ export default function LoginPage() {
             color: 'var(--text)',
             letterSpacing: '-0.03em',
             marginBottom: '8px',
-          }}>Manha Clothing</h1>
+          }}>Shaukat Collection</h1>
           <p style={{ 
             color: 'var(--text2)', 
             fontSize: '14px', 

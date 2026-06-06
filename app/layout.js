@@ -17,7 +17,7 @@ const dmMono = DM_Mono({
 });
 
 export const metadata = {
-  title: 'Manha Clothing Inventory',
+  title: 'Shaukat Collection Inventory',
   description: 'Inventory management system',
 };
 

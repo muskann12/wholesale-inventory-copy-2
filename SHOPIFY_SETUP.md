@@ -36,7 +36,7 @@ curl http://localhost:3000/api/shopify/list-webhooks
 ```
 
 ## Environment Variables Needed:
-- `SHOPIFY_STORE_NAME` - Your Shopify store name (e.g., "manha-clothing")
+- `SHOPIFY_STORE_NAME` - Your Shopify store name (e.g., "Shaukat Collectiona-clothing")
 - `SHOPIFY_CLIENT_ID` - OAuth app client ID
 - `SHOPIFY_CLIENT_SECRET` - OAuth app client secret
 - `NEXT_PUBLIC_APP_URL` - Your app's public URL (for webhooks)
