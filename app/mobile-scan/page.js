@@ -1,81 +1,85 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { BrowserMultiFormatReader } from '@zxing/browser';
+import { MultiFormatReader, BarcodeFormat } from '@zxing/library';
 import ProductPopup from '../components/ProductPopup';
 
 export default function MobileScanPage() {
   const videoRef = useRef(null);
+  const canvasRef = useRef(null);
   const [product, setProduct] = useState(null);
   const [status, setStatus] = useState('Starting camera...');
   const [scanned, setScanned] = useState('');
   const readerRef = useRef(null);
-  const [isScanning, setIsScanning] = useState(true);
+  let scanInterval = null;
 
   useEffect(() => {
-    const reader = new BrowserMultiFormatReader();
+    const reader = new MultiFormatReader();
     readerRef.current = reader;
 
-    const startReader = () => {
-      reader.decodeFromConstraints(
-        { video: { facingMode: 'environment' } },
-        videoRef.current,
-        (result, err) => {
-          if (result) {
-            const barcodeValue = result.getText();
-            setScanned(barcodeValue);
-            setStatus(`✅ Scanned: ${barcodeValue}`);
-            // Stop scanning temporarily
-            setIsScanning(false);
-            reader.reset();
-            // Fetch product
-            fetch(`/api/barcode?sku=${encodeURIComponent(barcodeValue)}`, { credentials: 'include' })
-              .then(res => res.ok ? res.json() : Promise.reject())
-              .then(data => setProduct(data))
-              .catch(() => alert('Product not found'));
-          } else if (err && err.name !== 'NotFoundException') {
-            // Ignore "NotFoundException" (no barcode found, continue scanning)
-            console.warn(err);
-          }
+    const startCamera = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' }
+        });
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+          setStatus('Camera ready – scanning...');
+          startScanning();
         }
-      ).catch(err => {
-        setStatus('❌ Camera error: ' + err.message);
-      });
+      } catch (err) {
+        setStatus('❌ Camera access denied: ' + err.message);
+        console.error(err);
+      }
     };
-
-    startReader();
+    startCamera();
 
     return () => {
-      if (readerRef.current) {
-        try {
-          readerRef.current.reset();
-        } catch (e) {}
-      }
+      if (scanInterval) clearInterval(scanInterval);
       if (videoRef.current?.srcObject) {
         videoRef.current.srcObject.getTracks().forEach(track => track.stop());
       }
     };
   }, []);
 
-  const restartScanning = () => {
-    if (!readerRef.current || !videoRef.current) return;
-    setIsScanning(true);
-    readerRef.current.decodeFromConstraints(
-      { video: { facingMode: 'environment' } },
-      videoRef.current,
-      (result, err) => {
+  const startScanning = () => {
+    if (!readerRef.current) return;
+    scanInterval = setInterval(async () => {
+      if (!videoRef.current || videoRef.current.readyState !== 4) return;
+      const canvas = canvasRef.current;
+      const context = canvas.getContext('2d');
+      canvas.width = videoRef.current.videoWidth;
+      canvas.height = videoRef.current.videoHeight;
+      if (canvas.width === 0 || canvas.height === 0) return;
+      context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+      try {
+        const luminanceSource = new (require('@zxing/library').HTMLCanvasElementLuminanceSource)(canvas);
+        const binaryBitmap = new (require('@zxing/library').BinaryBitmap)(new (require('@zxing/library').HybridBinarizer)(luminanceSource));
+        const result = readerRef.current.decodeWithState(binaryBitmap);
         if (result) {
           const barcodeValue = result.getText();
           setScanned(barcodeValue);
           setStatus(`✅ Scanned: ${barcodeValue}`);
-          setIsScanning(false);
-          readerRef.current.reset();
-          fetch(`/api/barcode?sku=${encodeURIComponent(barcodeValue)}`, { credentials: 'include' })
-            .then(res => res.ok ? res.json() : Promise.reject())
-            .then(data => setProduct(data))
-            .catch(() => alert('Product not found'));
+          clearInterval(scanInterval);
+          // Fetch product details
+          const res = await fetch(`/api/barcode?sku=${encodeURIComponent(barcodeValue)}`, { credentials: 'include' });
+          if (res.ok) {
+            const productData = await res.json();
+            setProduct(productData);
+            setStatus('Product loaded – popup open');
+          } else {
+            setStatus('❌ Product not found');
+            setTimeout(() => {
+              setScanned('');
+              setStatus('Ready – scan again');
+              startScanning();
+            }, 2000);
+          }
         }
+      } catch (err) {
+        // No barcode found – ignore
       }
-    ).catch(() => {});
+    }, 200);
   };
 
   const handleManualSubmit = async (e) => {
@@ -101,7 +105,7 @@ export default function MobileScanPage() {
     setProduct(null);
     setScanned('');
     setStatus('Ready – scan again');
-    restartScanning();
+    startScanning();
   };
 
   return (
@@ -109,8 +113,9 @@ export default function MobileScanPage() {
       <h1 style={{ fontSize: '28px', fontWeight: 700, marginBottom: '8px' }}>📱 Mobile Barcode Scanner</h1>
       <p style={{ marginBottom: '20px', color: '#6b7280' }}>Point camera at product barcode</p>
 
-      <div style={{ background: '#000', borderRadius: '12px', overflow: 'hidden' }}>
-        <video ref={videoRef} style={{ width: '100%', height: 'auto' }} />
+      <div style={{ position: 'relative', background: '#000', borderRadius: '12px', overflow: 'hidden' }}>
+        <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', height: 'auto' }} />
+        <canvas ref={canvasRef} style={{ display: 'none' }} />
       </div>
 
       <div style={{ marginTop: '20px', padding: '16px', background: '#f9fafb', borderRadius: '8px' }}>
@@ -118,7 +123,6 @@ export default function MobileScanPage() {
         {scanned && <p><strong>Last scanned:</strong> <code>{scanned}</code></p>}
       </div>
 
-      {/* Manual SKU fallback */}
       <div style={{ marginTop: '20px' }}>
         <p className="text-sm">Or type SKU manually:</p>
         <input
@@ -128,6 +132,8 @@ export default function MobileScanPage() {
           onKeyDown={(e) => e.key === 'Enter' && handleManualSubmit(e)}
         />
       </div>
+
+      <p className="text-xs text-center text-gray-500 mt-6">Works on all modern browsers</p>
 
       {product && <ProductPopup product={product} onClose={closePopup} isMobile={true} />}
     </div>
