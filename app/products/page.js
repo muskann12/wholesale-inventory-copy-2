@@ -86,31 +86,20 @@ function ProductModal({ mode, form, setForm, onClose, onSubmit, loading }) {
           </div>
 
           {/* Multiple Images */}
-          <div>
-            <label className="lbl">Product Images (URLs)</label>
-            {(form.images || []).map((url, idx) => (
-              <div key={idx} style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-                <input className="inp" type="text" value={url} placeholder="Image URL"
-                  onChange={e => {
-                    const newImages = [...(form.images || [])];
-                    newImages[idx] = e.target.value;
-                    setForm({ ...form, images: newImages });
-                  }} />
-                <button type="button"
-                  onClick={() => {
-                    const newImages = (form.images || []).filter((_, i) => i !== idx);
-                    setForm({ ...form, images: newImages });
-                  }}
-                  style={{ background: '#fee2e2', border: 'none', borderRadius: '8px', padding: '0 12px', cursor: 'pointer' }}>
-                  ✕
-                </button>
-              </div>
-            ))}
-            <button type="button" onClick={() => setForm({ ...form, images: [...(form.images || []), ''] })}
-              className="btn btn-ghost btn-sm" style={{ marginTop: '8px' }}>
-              + Add another image
-            </button>
-          </div>
+   <div>
+  <label className="lbl">Product Images (URLs)</label>
+  <textarea
+    className="inp"
+    rows="2"
+    placeholder="Enter image URLs separated by commas&#10;Example: https://example.com/1.jpg, https://example.com/2.jpg"
+    value={form.images?.join(', ') || ''}
+    onChange={e => {
+      const urls = e.target.value.split(',').map(s => s.trim()).filter(s => s !== '');
+      setForm({ ...form, images: urls });
+    }}
+  />
+  <p className="text-xs text-gray-500 mt-1">Separate multiple URLs with commas</p>
+</div>
 
           {/* Legacy imageUrl field (optional, you can remove) */}
           <div>
@@ -302,6 +291,7 @@ const handleSubmit = async () => {
     if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
     await fetch(`/api/products/${id}`, { method: 'DELETE' });
     fetchProducts();
+    console.log('📦 Payload images:', payload.images);
   };
 
   const downloadBarcode = async (sku) => {
