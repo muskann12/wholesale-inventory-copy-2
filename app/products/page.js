@@ -85,29 +85,43 @@ function ProductModal({ mode, form, setForm, onClose, onSubmit, loading }) {
               onChange={e => setForm({ ...form, description: e.target.value })} />
           </div>
 
-          {/* Multiple Images */}
-   <div>
+   {/* Multiple Images – Button based */}
+<div>
   <label className="lbl">Product Images (URLs)</label>
-  <textarea
-    className="inp"
-    rows="2"
-    placeholder="Enter image URLs separated by commas&#10;Example: https://example.com/1.jpg, https://example.com/2.jpg"
-    value={form.images?.join(', ') || ''}
-    onChange={e => {
-      const urls = e.target.value.split(',').map(s => s.trim()).filter(s => s !== '');
-      setForm({ ...form, images: urls });
-    }}
-  />
-  <p className="text-xs text-gray-500 mt-1">Separate multiple URLs with commas</p>
+  {form.images && form.images.map((url, idx) => (
+    <div key={idx} style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+      <input
+        className="inp"
+        type="text"
+        value={url}
+        placeholder="Image URL"
+        onChange={e => {
+          const newImages = [...form.images];
+          newImages[idx] = e.target.value;
+          setForm({ ...form, images: newImages });
+        }}
+      />
+      <button
+        type="button"
+        onClick={() => {
+          const newImages = form.images.filter((_, i) => i !== idx);
+          setForm({ ...form, images: newImages });
+        }}
+        style={{ background: '#fee2e2', border: 'none', borderRadius: '8px', padding: '0 12px', cursor: 'pointer' }}
+      >
+        ✕
+      </button>
+    </div>
+  ))}
+  <button
+    type="button"
+    onClick={() => setForm({ ...form, images: [...(form.images || []), ''] })}
+    className="btn btn-ghost btn-sm"
+    style={{ marginTop: '8px' }}
+  >
+    + Add another image
+  </button>
 </div>
-
-          {/* Legacy imageUrl field (optional, you can remove) */}
-          <div>
-            <label className="lbl">Legacy Image URL (optional)</label>
-            <input className="inp" placeholder="https://..." value={form.imageUrl ?? ''}
-              onChange={e => setForm({ ...form, imageUrl: e.target.value })} />
-          </div>
-
           {/* Toggle for variant pricing */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px', background: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
             <input type="checkbox" id="useVariants" checked={useVariants} onChange={e => setUseVariants(e.target.checked)} />
