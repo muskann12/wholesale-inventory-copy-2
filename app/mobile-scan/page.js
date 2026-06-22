@@ -61,7 +61,6 @@ export default function MobileScanPage() {
           setScanned(barcodeValue);
           setStatus(`✅ Scanned: ${barcodeValue}`);
           clearInterval(scanInterval);
-          // Fetch product details
           const res = await fetch(`/api/barcode?sku=${encodeURIComponent(barcodeValue)}`, { credentials: 'include' });
           if (res.ok) {
             const productData = await res.json();
@@ -84,21 +83,37 @@ export default function MobileScanPage() {
 
   const handleManualSubmit = async (e) => {
     const sku = e.target.value.trim();
-    if (!sku) return;
+    if (!sku) {
+      setStatus('⚠️ Please enter a SKU');
+      return;
+    }
+    setStatus(`⏳ Searching for "${sku}"...`);
+    console.log('Manual SKU entered:', sku);
+
     try {
       const res = await fetch(`/api/barcode?sku=${encodeURIComponent(sku)}`, { credentials: 'include' });
+      console.log('API response status:', res.status);
       if (res.ok) {
         const productData = await res.json();
+        console.log('Product found:', productData);
         setProduct(productData);
         setScanned(sku);
-        setStatus('Product loaded');
+        setStatus(`✅ Product loaded!`);
+        // Clear the input after successful load
+        e.target.value = '';
       } else {
-        setStatus('❌ Product not found');
+        const err = await res.json();
+        console.error('Product not found:', err);
+        setStatus(`❌ Product "${sku}" not found`);
+        alert(`Product "${sku}" not found.`);
+        e.target.value = '';
       }
-    } catch {
+    } catch (err) {
+      console.error('Network error:', err);
       setStatus('❌ Network error');
+      alert('Network error. Please try again.');
+      e.target.value = '';
     }
-    e.target.value = '';
   };
 
   const closePopup = () => {
@@ -135,6 +150,7 @@ export default function MobileScanPage() {
 
       <p className="text-xs text-center text-gray-500 mt-6">Works on all modern browsers</p>
 
+      {/* Popup – rendered when product is set */}
       {product && <ProductPopup product={product} onClose={closePopup} isMobile={true} />}
     </div>
   );
