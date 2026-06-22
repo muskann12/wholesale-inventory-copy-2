@@ -1,20 +1,23 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { MultiFormatReader, BarcodeFormat } from '@zxing/library';
-import ProductPopup from '../components/ProductPopup';
+import ProductPopup from '../components/ProductPopup';  // reuse your existing popup
 
 export default function MobileScanPage() {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
+  const inputRef = useRef(null); // for manual SKU input
   const [product, setProduct] = useState(null);
   const [status, setStatus] = useState('Starting camera...');
   const [scanned, setScanned] = useState('');
-  const readerRef = useRef(null);
+  const [supported, setSupported] = useState(true);
   let scanInterval = null;
 
   useEffect(() => {
-    const reader = new MultiFormatReader();
-    readerRef.current = reader;
+    if (!('BarcodeDetector' in window)) {
+      setSupported(false);
+      setStatus('❌ Barcode scanning not supported. Use Chrome or Safari iOS 15.4+.');
+      return;
+    }
 
     const startCamera = async () => {
       try {
@@ -24,7 +27,7 @@ export default function MobileScanPage() {
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           await videoRef.current.play();
-          setStatus('Camera ready – scanning...');
+          setStatus('Ready – point camera at barcode');
           startScanning();
         }
       } catch (err) {
@@ -43,7 +46,9 @@ export default function MobileScanPage() {
   }, []);
 
   const startScanning = () => {
-    if (!readerRef.current) return;
+    const detector = new BarcodeDetector({
+      formats: ['code_128', 'ean_13', 'ean_8', 'code_39', 'codabar', 'upc_a', 'upc_e', 'qr_code']
+    });
     scanInterval = setInterval(async () => {
       if (!videoRef.current || videoRef.current.readyState !== 4) return;
       const canvas = canvasRef.current;
@@ -53,21 +58,25 @@ export default function MobileScanPage() {
       if (canvas.width === 0 || canvas.height === 0) return;
       context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
       try {
-        const luminanceSource = new (require('@zxing/library').HTMLCanvasElementLuminanceSource)(canvas);
-        const binaryBitmap = new (require('@zxing/library').BinaryBitmap)(new (require('@zxing/library').HybridBinarizer)(luminanceSource));
-        const result = readerRef.current.decodeWithState(binaryBitmap);
-        if (result) {
-          const barcodeValue = result.getText();
+        const barcodes = await detector.detect(canvas);
+        if (barcodes.length > 0) {
+          const barcodeValue = barcodes[0].rawValue;
           setScanned(barcodeValue);
-          setStatus(`✅ Scanned: ${barcodeValue}`);
+          setStatus(`✅ Detected: ${barcodeValue}`);
           clearInterval(scanInterval);
+
+          // Fetch product details directly
           const res = await fetch(`/api/barcode?sku=${encodeURIComponent(barcodeValue)}`, { credentials: 'include' });
           if (res.ok) {
             const productData = await res.json();
+            console.log('Product found:', productData); // for debugging
             setProduct(productData);
             setStatus('Product loaded – popup open');
           } else {
-            setStatus('❌ Product not found');
+            const errText = await res.text();
+            console.error('Product not found:', errText);
+            setStatus(`❌ Product not found: ${barcodeValue}`);
+            alert(`Product "${barcodeValue}" not found.`);
             setTimeout(() => {
               setScanned('');
               setStatus('Ready – scan again');
@@ -76,7 +85,7 @@ export default function MobileScanPage() {
           }
         }
       } catch (err) {
-        // No barcode found – ignore
+        // ignore
       }
     }, 200);
   };
@@ -88,32 +97,33 @@ export default function MobileScanPage() {
       return;
     }
     setStatus(`⏳ Searching for "${sku}"...`);
-    console.log('Manual SKU entered:', sku);
-
     try {
       const res = await fetch(`/api/barcode?sku=${encodeURIComponent(sku)}`, { credentials: 'include' });
-      console.log('API response status:', res.status);
       if (res.ok) {
         const productData = await res.json();
-        console.log('Product found:', productData);
         setProduct(productData);
         setScanned(sku);
-        setStatus(`✅ Product loaded!`);
-        // Clear the input after successful load
+        setStatus('✅ Product loaded!');
         e.target.value = '';
       } else {
         const err = await res.json();
-        console.error('Product not found:', err);
         setStatus(`❌ Product "${sku}" not found`);
         alert(`Product "${sku}" not found.`);
         e.target.value = '';
       }
     } catch (err) {
-      console.error('Network error:', err);
       setStatus('❌ Network error');
       alert('Network error. Please try again.');
       e.target.value = '';
     }
+  };
+
+  // Search button handler
+  const handleSearchClick = () => {
+    const sku = inputRef.current?.value.trim();
+    if (!sku) return;
+    handleManualSubmit({ target: { value: sku } });
+    inputRef.current.value = '';
   };
 
   const closePopup = () => {
@@ -122,6 +132,24 @@ export default function MobileScanPage() {
     setStatus('Ready – scan again');
     startScanning();
   };
+
+  if (!supported) {
+    return (
+      <div className="p-4 text-center">
+        <h1 className="text-xl font-bold">Mobile Barcode Scanner</h1>
+        <p className="text-red-600 mt-4">{status}</p>
+        <div className="mt-4">
+          <p className="text-sm">Or type SKU manually:</p>
+          <input
+            type="text"
+            placeholder="Enter SKU"
+            className="mt-1 border p-2 rounded w-full"
+            onKeyDown={(e) => e.key === 'Enter' && handleManualSubmit(e)}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: '20px', maxWidth: '600px', margin: '0 auto', minHeight: '100vh' }}>
@@ -138,19 +166,39 @@ export default function MobileScanPage() {
         {scanned && <p><strong>Last scanned:</strong> <code>{scanned}</code></p>}
       </div>
 
+      {/* Manual SKU fallback with Search button */}
       <div style={{ marginTop: '20px' }}>
         <p className="text-sm">Or type SKU manually:</p>
-        <input
-          type="text"
-          placeholder="Enter SKU"
-          style={{ width: '100%', padding: '10px', border: '1px solid #ccc', borderRadius: '8px' }}
-          onKeyDown={(e) => e.key === 'Enter' && handleManualSubmit(e)}
-        />
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <input
+            ref={inputRef}
+            type="text"
+            placeholder="Enter SKU"
+            className="mt-1 border p-2 rounded w-full"
+            onKeyDown={(e) => e.key === 'Enter' && handleManualSubmit(e)}
+            style={{ background: '#fff', borderColor: '#e5e7eb', flex: 1 }}
+          />
+          <button
+            onClick={handleSearchClick}
+            style={{
+              padding: '10px 16px',
+              background: '#3b82f6',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              marginTop: '4px',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            Search
+          </button>
+        </div>
       </div>
 
-      <p className="text-xs text-center text-gray-500 mt-6">Works on all modern browsers</p>
+      <p className="text-xs text-center text-gray-500 mt-6">Uses native BarcodeDetector – works with CODE‑128, EAN‑13, UPC‑A etc.</p>
 
-      {/* Popup – rendered when product is set */}
+      {/* Product popup (appears on mobile) */}
       {product && <ProductPopup product={product} onClose={closePopup} isMobile={true} />}
     </div>
   );
