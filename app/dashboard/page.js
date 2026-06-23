@@ -15,7 +15,8 @@ import {
   Package,
   ShoppingBag,
   Coins,
-  Activity
+  Activity,
+  Wallet
 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useAuth } from '../hooks/useAuth';
@@ -61,6 +62,7 @@ export default function DashboardPage() {
     totalProfit: 0,
     totalSold: 0,
     remainingStock: 0,
+    stockCost: 0,
     dailyData: []
   });
   const [days, setDays] = useState(30);
@@ -119,11 +121,12 @@ export default function DashboardPage() {
       </div>
 
       {/* STATS */}
-      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard title="Revenue" value={`Rs${data.totalRevenue.toLocaleString()}`} sub="All time" icon={Coins} color="#eab308" />
         <StatCard title="Profit" value={`Rs${data.totalProfit.toLocaleString()}`} sub={`${profitMargin}% margin`} icon={TrendingUp} color="#10b981" />
         <StatCard title="Sold" value={data.totalSold.toLocaleString()} sub="Units" icon={ShoppingBag} color="#3b82f6" />
         <StatCard title="Stock" value={data.remainingStock.toLocaleString()} sub="Available" icon={Package} color="#8b5cf6" />
+        <StatCard title="Stock Cost" value={`Rs${(data.stockCost ?? 0).toLocaleString()}`} sub="Remaining inventory" icon={Wallet} color="#f43f5e" />
       </div>
 
       {/* CHART with range buttons */}
