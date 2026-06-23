@@ -18,10 +18,6 @@ const EMPTY_FORM = {
 };
 
 function ProductModal({ mode, form, setForm, onClose, onSubmit, loading }) {
-  const [useVariants, setUseVariants] = useState(
-    form.variants && form.variants.some(v => v.costPrice || v.sellingPrice)
-  );
-
   const calculateMargin = (selling, cost) => {
     if (!selling || !cost) return null;
     return (((selling - cost) / selling) * 100).toFixed(1);
@@ -29,26 +25,8 @@ function ProductModal({ mode, form, setForm, onClose, onSubmit, loading }) {
 
   const handleVariantChange = (index, field, value) => {
     const newVariants = [...form.variants];
-    if (field === 'quantity') {
-      newVariants[index].quantity = parseInt(value) || '';
-    } else {
-      newVariants[index][field] = parseFloat(value) || '';
-    }
+    newVariants[index][field] = field === 'quantity' ? parseInt(value) || '' : parseFloat(value) || '';
     setForm({ ...form, variants: newVariants });
-  };
-
-  const handleLegacyChange = (field, value) => {
-    const newForm = { ...form, [field]: value };
-    if (useVariants && field === 'costPrice') {
-      const newVariants = [...form.variants];
-      newVariants[1].costPrice = parseFloat(value) || '';
-      newForm.variants = newVariants;
-    } else if (useVariants && field === 'sellingPrice') {
-      const newVariants = [...form.variants];
-      newVariants[1].sellingPrice = parseFloat(value) || '';
-      newForm.variants = newVariants;
-    }
-    setForm(newForm);
   };
 
   return (
@@ -65,7 +43,6 @@ function ProductModal({ mode, form, setForm, onClose, onSubmit, loading }) {
         </div>
 
         <div style={{ display: 'grid', gap: '16px', maxHeight: '80vh', overflowY: 'auto', paddingRight: '8px' }}>
-          {/* Basic fields */}
           <div>
             <label className="lbl">Product Name</label>
             <input className="inp" value={form.name ?? ''}
@@ -85,110 +62,70 @@ function ProductModal({ mode, form, setForm, onClose, onSubmit, loading }) {
               onChange={e => setForm({ ...form, description: e.target.value })} />
           </div>
 
-   {/* Multiple Images – Button based */}
-<div>
-  <label className="lbl">Product Images (URLs)</label>
-  {form.images && form.images.map((url, idx) => (
-    <div key={idx} style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-      <input
-        className="inp"
-        type="text"
-        value={url}
-        placeholder="Image URL"
-        onChange={e => {
-          const newImages = [...form.images];
-          newImages[idx] = e.target.value;
-          setForm({ ...form, images: newImages });
-        }}
-      />
-      <button
-        type="button"
-        onClick={() => {
-          const newImages = form.images.filter((_, i) => i !== idx);
-          setForm({ ...form, images: newImages });
-        }}
-        style={{ background: '#fee2e2', border: 'none', borderRadius: '8px', padding: '0 12px', cursor: 'pointer' }}
-      >
-        ✕
-      </button>
-    </div>
-  ))}
-  <button
-    type="button"
-    onClick={() => setForm({ ...form, images: [...(form.images || []), ''] })}
-    className="btn btn-ghost btn-sm"
-    style={{ marginTop: '8px' }}
-  >
-    + Add another image
-  </button>
-</div>
-          {/* Toggle for variant pricing */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px', background: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-            <input type="checkbox" id="useVariants" checked={useVariants} onChange={e => setUseVariants(e.target.checked)} />
-            <label htmlFor="useVariants">Use different prices/stock for sizes (S/M/L)</label>
+          <div>
+            <label className="lbl">Product Images (URLs)</label>
+            {form.images && form.images.map((url, idx) => (
+              <div key={idx} style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                <input
+                  className="inp"
+                  type="text"
+                  value={url}
+                  placeholder="Image URL"
+                  onChange={e => {
+                    const newImages = [...form.images];
+                    newImages[idx] = e.target.value;
+                    setForm({ ...form, images: newImages });
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, images: form.images.filter((_, i) => i !== idx) })}
+                  style={{ background: '#fee2e2', border: 'none', borderRadius: '8px', padding: '0 12px', cursor: 'pointer' }}
+                >✕</button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => setForm({ ...form, images: [...(form.images || []), ''] })}
+              className="btn btn-ghost btn-sm"
+              style={{ marginTop: '8px' }}
+            >+ Add another image</button>
           </div>
 
-          {!useVariants && (
-            <>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div><label className="lbl">Cost Price (Rs)</label>
-                  <input className="inp" type="number" value={form.costPrice ?? ''}
-                    onChange={e => handleLegacyChange('costPrice', e.target.value)} required />
-                </div>
-                <div><label className="lbl">Selling Price (Rs)</label>
-                  <input className="inp" type="number" value={form.sellingPrice ?? ''}
-                    onChange={e => handleLegacyChange('sellingPrice', e.target.value)} required />
-                </div>
-              </div>
-              {form.sellingPrice && form.costPrice && (
-                <div style={{ background: '#f9fafb', borderRadius: '8px', padding: '10px 14px', display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Profit Margin</span>
-                  <span style={{ fontWeight: 700, color: calculateMargin(form.sellingPrice, form.costPrice) > 0 ? '#10b981' : '#ef4444' }}>
-                    {calculateMargin(form.sellingPrice, form.costPrice)}%
-                  </span>
-                </div>
-              )}
-              <div><label className="lbl">Stock Quantity</label>
-                <input className="inp" type="number" value={form.quantity ?? ''}
-                  onChange={e => setForm({ ...form, quantity: parseInt(e.target.value) || '' })} />
-              </div>
-            </>
-          )}
-
-          {useVariants && form.variants && (
-            <>
-              {form.variants.map((variant, idx) => {
-                const margin = calculateMargin(variant.sellingPrice, variant.costPrice);
-                return (
-                  <div key={variant.size} style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', background: '#f9fafb' }}>
-                    <h3 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: 600 }}>{variant.size}</h3>
-                    <div style={{ display: 'grid', gap: '12px' }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                        <div><label style={{ fontSize: '12px', color: '#6b7280' }}>Cost Price (Rs)</label>
-                          <input className="inp" type="number" value={variant.costPrice ?? ''}
-                            onChange={e => handleVariantChange(idx, 'costPrice', e.target.value)} />
-                        </div>
-                        <div><label style={{ fontSize: '12px', color: '#6b7280' }}>Selling Price (Rs)</label>
-                          <input className="inp" type="number" value={variant.sellingPrice ?? ''}
-                            onChange={e => handleVariantChange(idx, 'sellingPrice', e.target.value)} />
-                        </div>
-                      </div>
-                      <div><label style={{ fontSize: '12px', color: '#6b7280' }}>Stock</label>
-                        <input className="inp" type="number" value={variant.quantity ?? ''}
-                          onChange={e => handleVariantChange(idx, 'quantity', e.target.value)} />
-                      </div>
-                      {margin && (
-                        <div style={{ background: 'white', borderRadius: '6px', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
-                          <span>Margin</span>
-                          <span style={{ fontWeight: 700, color: parseFloat(margin) > 0 ? '#10b981' : '#ef4444' }}>{margin}%</span>
-                        </div>
-                      )}
+          {/* S/M/L Variants — Always Shown, Always Required */}
+          {form.variants && form.variants.map((variant, idx) => {
+            const margin = calculateMargin(variant.sellingPrice, variant.costPrice);
+            return (
+              <div key={variant.size} style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', background: '#f9fafb' }}>
+                <h3 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: 600 }}>{variant.size}</h3>
+                <div style={{ display: 'grid', gap: '12px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div>
+                      <label style={{ fontSize: '12px', color: '#6b7280' }}>Cost Price (Rs)</label>
+                      <input className="inp" type="number" value={variant.costPrice ?? ''}
+                        onChange={e => handleVariantChange(idx, 'costPrice', e.target.value)} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '12px', color: '#6b7280' }}>Selling Price (Rs)</label>
+                      <input className="inp" type="number" value={variant.sellingPrice ?? ''}
+                        onChange={e => handleVariantChange(idx, 'sellingPrice', e.target.value)} />
                     </div>
                   </div>
-                );
-              })}
-            </>
-          )}
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#6b7280' }}>Stock</label>
+                    <input className="inp" type="number" value={variant.quantity ?? ''}
+                      onChange={e => handleVariantChange(idx, 'quantity', e.target.value)} />
+                  </div>
+                  {margin && (
+                    <div style={{ background: 'white', borderRadius: '6px', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                      <span>Margin</span>
+                      <span style={{ fontWeight: 700, color: parseFloat(margin) > 0 ? '#10b981' : '#ef4444' }}>{margin}%</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         <div style={{ display: 'flex', gap: '10px', marginTop: '24px' }}>
@@ -202,10 +139,16 @@ function ProductModal({ mode, form, setForm, onClose, onSubmit, loading }) {
   );
 }
 
-function StockBadge({ qty }) {
-  if (qty <= 0)  return <span className="badge badge-red">Out of stock</span>;
-  if (qty <= 5)  return <span className="badge badge-yellow">{qty} left</span>;
-  return <span className="badge badge-green">{qty} in stock</span>;
+function StockBadge({ variants }) {
+  if (!variants || variants.length === 0) return <span className="badge badge-red">No stock</span>;
+  const total = variants.reduce((sum, v) => sum + (parseInt(v.quantity) || 0), 0);
+  if (total === 0) return <span className="badge badge-red">Out of stock</span>;
+  const breakdown = variants.map(v => `${v.size.charAt(0)}:${v.quantity}`).join(' ');
+  return (
+    <span className="badge badge-green" style={{ background: '#e0f2e7', color: '#166534' }}>
+      {breakdown}
+    </span>
+  );
 }
 
 export default function ProductsPage() {
@@ -232,80 +175,61 @@ export default function ProductsPage() {
   useEffect(() => { fetchProducts(); }, []);
 
   const openAdd = () => { setForm(EMPTY_FORM); setModal('add'); };
-const openEdit = (p) => {
-  let variants = p.variants;
-  if (!variants || variants.length === 0 || variants.every(v => v.costPrice === 0 && v.sellingPrice === 0 && v.quantity === 0)) {
-    // No valid variants – fallback to legacy fields
-    variants = [
-      { size: 'Small', costPrice: p.costPrice || 0, sellingPrice: p.sellingPrice || 0, quantity: p.quantity || 0 },
-      { size: 'Medium', costPrice: p.costPrice || 0, sellingPrice: p.sellingPrice || 0, quantity: p.quantity || 0 },
-      { size: 'Large', costPrice: p.costPrice || 0, sellingPrice: p.sellingPrice || 0, quantity: p.quantity || 0 },
-    ];
-  }
-  setForm({
-    name: p.name || '',
-    sku: p.sku || '',
-    costPrice: p.costPrice || 0,
-    description: p.description || '',
-    images: p.images || [],
-    variants: variants,
-    sellingPrice: p.sellingPrice || 0,
-    quantity: p.quantity || 0,
-    imageUrl: p.imageUrl || '',
-  });
-  setEditId(p._id);
-  setModal('edit');
-};
-  const closeModal = () => { setModal(null); setEditId(null); setForm(EMPTY_FORM); };
-const handleSubmit = async () => {
-  setLoading(true);
-  try {
-    // Determine if we are using variants or single mode
-    const useVariants = form.variants && form.variants.some(v => v.costPrice || v.sellingPrice);
 
-    let variantsToSend;
-    if (useVariants) {
-      // Use the variants from the form
-      variantsToSend = form.variants.map(v => ({
+  const openEdit = (p) => {
+    let variants = p.variants;
+    if (!variants || variants.length === 0 || variants.every(v => v.costPrice === 0 && v.sellingPrice === 0 && v.quantity === 0)) {
+      variants = [
+        { size: 'Small', costPrice: p.costPrice || 0, sellingPrice: p.sellingPrice || 0, quantity: p.quantity || 0 },
+        { size: 'Medium', costPrice: p.costPrice || 0, sellingPrice: p.sellingPrice || 0, quantity: p.quantity || 0 },
+        { size: 'Large', costPrice: p.costPrice || 0, sellingPrice: p.sellingPrice || 0, quantity: p.quantity || 0 },
+      ];
+    }
+    setForm({
+      name: p.name || '',
+      sku: p.sku || '',
+      costPrice: p.costPrice || 0,
+      description: p.description || '',
+      images: p.images || [],
+      variants: variants,
+    });
+    setEditId(p._id);
+    setModal('edit');
+  };
+
+  const closeModal = () => { setModal(null); setEditId(null); setForm(EMPTY_FORM); };
+
+  const handleSubmit = async () => {
+    setLoading(true);
+    try {
+      const variantsToSend = form.variants.map(v => ({
         size: v.size,
         costPrice: Number(v.costPrice) || 0,
         sellingPrice: Number(v.sellingPrice) || 0,
         quantity: Number(v.quantity) || 0,
       }));
-    } else {
-      // Legacy single mode: copy the same values to all three sizes
-      const singleCost = Number(form.costPrice) || 0;
-      const singlePrice = Number(form.sellingPrice) || 0;
-      const singleQty = Number(form.quantity) || 0;
-      variantsToSend = [
-        { size: 'Small', costPrice: singleCost, sellingPrice: singlePrice, quantity: singleQty },
-        { size: 'Medium', costPrice: singleCost, sellingPrice: singlePrice, quantity: singleQty },
-        { size: 'Large', costPrice: singleCost, sellingPrice: singlePrice, quantity: singleQty },
-      ];
-    }
 
-    const payload = {
-      name: form.name,
-      sku: form.sku,
-      costPrice: Number(form.costPrice) || 0,
-      description: form.description || '',
-      images: form.images || [],
-      variants: variantsToSend,
-    };
+      const payload = {
+        name: form.name,
+        sku: form.sku,
+        costPrice: Number(form.variants[1]?.costPrice) || 0,
+        description: form.description || '',
+        images: form.images || [],
+        variants: variantsToSend,
+      };
 
-    const url = modal === 'add' ? '/api/products' : `/api/products/${editId}`;
-    const method = modal === 'add' ? 'POST' : 'PUT';
-    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-    if (res.ok) { closeModal(); fetchProducts(); }
-    else { const err = await res.json(); alert(err.error || 'Error saving product'); }
-  } finally { setLoading(false); }
-};
+      const url = modal === 'add' ? '/api/products' : `/api/products/${editId}`;
+      const method = modal === 'add' ? 'POST' : 'PUT';
+      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      if (res.ok) { closeModal(); fetchProducts(); }
+      else { const err = await res.json(); alert(err.error || 'Error saving product'); }
+    } finally { setLoading(false); }
+  };
 
   const handleDelete = async (id, name) => {
     if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
     await fetch(`/api/products/${id}`, { method: 'DELETE' });
     fetchProducts();
-    console.log('📦 Payload images:', payload.images);
   };
 
   const downloadBarcode = async (sku) => {
@@ -328,15 +252,9 @@ const handleSubmit = async () => {
     p.name.toLowerCase().includes(search.toLowerCase()) ||
     p.sku.toLowerCase().includes(search.toLowerCase())
   );
+
   const isMobile = windowWidth < 768;
   if (isLoading) return <div className="p-8 text-center">Loading...</div>;
-
-  const totalStock = (p) => {
-    if (p.variants && p.variants.length) {
-      return p.variants.reduce((sum, v) => sum + (parseInt(v.quantity) || 0), 0);
-    }
-    return p.quantity || 0;
-  };
 
   return (
     <div className="page">
@@ -378,7 +296,7 @@ const handleSubmit = async () => {
         .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
         .tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
         .tbl th { text-align: left; padding: 16px 16px; background: var(--bg3); border-bottom: 1px solid var(--border); font-weight: 600; color: var(--text2); font-size: 13px; }
-        .tbl td { padding: 16px 16px; border-bottom: 1px solid var(--border); color: var(--text); }
+        .tbl td { padding: 16px 16px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: top; }
         .tbl tr:hover td { background: #f3f4f6; }
         .product-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 12px; display: none; }
         .badge { display: inline-block; padding: 4px 10px; border-radius: 30px; font-size: 12px; font-weight: 500; }
@@ -394,15 +312,33 @@ const handleSubmit = async () => {
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
       `}</style>
 
-      {modal && <ProductModal mode={modal} form={form} setForm={setForm} onClose={closeModal} onSubmit={handleSubmit} loading={loading} />}
+      {modal && (
+        <ProductModal
+          mode={modal}
+          form={form}
+          setForm={setForm}
+          onClose={closeModal}
+          onSubmit={handleSubmit}
+          loading={loading}
+        />
+      )}
 
       <div className="page-header">
-        <div><h1 className="page-title">Products</h1><p className="page-sub">{products.length} items in inventory</p></div>
+        <div>
+          <h1 className="page-title">Products</h1>
+          <p className="page-sub">{products.length} items in inventory</p>
+        </div>
         <button className="btn btn-primary" onClick={openAdd}>+ Add Product</button>
       </div>
 
       <div style={{ marginBottom: '24px' }}>
-        <input className="inp" placeholder="Search by name or SKU..." value={search} onChange={e => setSearch(e.target.value)} style={{ maxWidth: '360px' }} />
+        <input
+          className="inp"
+          placeholder="Search by name or SKU..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          style={{ maxWidth: '360px' }}
+        />
       </div>
 
       {/* Desktop Table View */}
@@ -411,41 +347,90 @@ const handleSubmit = async () => {
           <div style={{ overflowX: 'auto' }}>
             <table className="tbl">
               <thead>
-                <tr><th>Product</th><th>SKU</th><th>Cost</th><th>Price</th><th>Margin</th><th>Stock</th><th>Actions</th></tr>
+                <tr>
+                  <th>Product</th>
+                  <th>SKU</th>
+                  <th>Cost</th>
+                  <th>Price</th>
+                  <th>Margin</th>
+                  <th>Stock</th>
+                  <th>Actions</th>
+                </tr>
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
-                  <tr><td colSpan={7} style={{ textAlign: 'center', color: '#6b7280', padding: '48px 20px' }}>{search ? 'No products match your search.' : 'No products yet. Add your first one!'}</td></tr>
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: 'center', color: '#6b7280', padding: '48px 20px' }}>
+                      {search ? 'No products match your search.' : 'No products yet. Add your first one!'}
+                    </td>
+                  </tr>
                 ) : (
-                  filtered.map(p => {
-                    const medium = p.variants?.find(v => v.size === 'Medium');
-                    const displayCost = p.costPrice ?? medium?.costPrice ?? 0;
-                    const displayPrice = p.sellingPrice ?? medium?.sellingPrice ?? 0;
-                    const margin = displayPrice && displayCost ? (((displayPrice - displayCost) / displayPrice) * 100).toFixed(1) : '0';
-                    const stock = totalStock(p);
-                    return (
-                      <tr key={p._id}>
-                        <td><div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  filtered.map(p => (
+                    <tr key={p._id}>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                           {p.images && p.images[0] ? (
                             <img src={p.images[0]} alt={p.name} style={{ width: 40, height: 40, borderRadius: '8px', objectFit: 'cover', border: '1px solid #e5e7eb' }} />
                           ) : (
                             <div style={{ width: 40, height: 40, borderRadius: '8px', background: '#f3f4f6', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, color: '#6b7280' }}>◈</div>
                           )}
                           <span style={{ fontWeight: 500 }}>{p.name}</span>
-                        </div></td>
-                        <td><code style={{ color: '#6b7280', fontSize: 13, background: '#f3f4f6', padding: '2px 8px', borderRadius: 6 }}>{p.sku}</code></td>
-                        <td style={{ color: '#6b7280' }}>Rs{displayCost.toLocaleString()}</td>
-                        <td style={{ fontWeight: 600 }}>Rs{displayPrice.toLocaleString()}</td>
-                        <td><span style={{ color: parseFloat(margin) > 0 ? '#10b981' : '#ef4444', fontWeight: 600 }}>{margin}%</span></td>
-                        <td><StockBadge qty={stock} /></td>
-                        <td><div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        </div>
+                      </td>
+                      <td>
+                        <code style={{ color: '#6b7280', fontSize: 13, background: '#f3f4f6', padding: '2px 8px', borderRadius: 6 }}>{p.sku}</code>
+                      </td>
+                      <td style={{ fontSize: '13px' }}>
+                        {p.variants?.map(v => (
+                          <div key={v.size} style={{ color: '#6b7280', lineHeight: '1.8' }}>
+                            {v.size}: Rs{(v.costPrice || 0).toLocaleString()}
+                          </div>
+                        )) || <span style={{ color: '#6b7280' }}>Rs0</span>}
+                      </td>
+                      <td style={{ fontSize: '13px' }}>
+                        {p.variants?.map(v => (
+                          <div key={v.size} style={{ fontWeight: 500, lineHeight: '1.8' }}>
+                            {v.size}: Rs{(v.sellingPrice || 0).toLocaleString()}
+                          </div>
+                        )) || <span>Rs0</span>}
+                      </td>
+                      <td style={{ fontSize: '13px' }}>
+                        {p.variants?.map(v => {
+                          const margin = v.sellingPrice && v.costPrice
+                            ? (((v.sellingPrice - v.costPrice) / v.sellingPrice) * 100).toFixed(1)
+                            : '0';
+                          return (
+                            <div key={v.size} style={{ color: parseFloat(margin) > 0 ? '#10b981' : '#ef4444', fontWeight: 600, lineHeight: '1.8' }}>
+                              {v.size}: {margin}%
+                            </div>
+                          );
+                        })}
+                      </td>
+                      <td>
+                        <StockBadge variants={p.variants} />
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                           <button className="btn btn-ghost btn-sm" onClick={() => openEdit(p)}>Edit</button>
                           <button className="btn btn-success btn-sm" onClick={() => downloadBarcode(p.sku)}>Barcode</button>
+                          <button
+                            onClick={async () => {
+                              if (!confirm(`Sync "${p.name}" to Shopify?`)) return;
+                              try {
+                                const res = await fetch(`/api/products/${p._id}/sync`, { method: 'POST' });
+                                const data = await res.json();
+                                if (res.ok) { alert('✅ Synced successfully!'); fetchProducts(); }
+                                else { alert('❌ ' + (data.error || 'Sync failed')); }
+                              } catch (err) { alert('Network error'); }
+                            }}
+                            className="btn btn-primary btn-sm"
+                            style={{ background: '#f59e0b', color: '#000' }}
+                          >Sync</button>
                           <button className="btn btn-danger btn-sm" onClick={() => handleDelete(p._id, p.name)}>Delete</button>
-                        </div></td>
-                      </tr>
-                    );
-                  })
+                        </div>
+                      </td>
+                    </tr>
+                  ))
                 )}
               </tbody>
             </table>
@@ -456,45 +441,57 @@ const handleSubmit = async () => {
       {/* Mobile Card View */}
       {isMobile && (
         <div>
-          {filtered.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '48px 20px', background: 'var(--bg2)', borderRadius: '12px', border: '1px solid var(--border)' }}>
-              {search ? 'No products match your search.' : 'No products yet. Add your first one!'}
-            </div>
-          ) : (
-            filtered.map(p => {
-              const medium = p.variants?.find(v => v.size === 'Medium');
-              const displayCost = p.costPrice ?? medium?.costPrice ?? 0;
-              const displayPrice = p.sellingPrice ?? medium?.sellingPrice ?? 0;
-              const margin = displayPrice && displayCost ? (((displayPrice - displayCost) / displayPrice) * 100).toFixed(1) : '0';
-              const stock = totalStock(p);
-              return (
-                <div key={p._id} className="product-card" style={{ display: 'block' }}>
-                  <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
-                    {p.images && p.images[0] ? (
-                      <img src={p.images[0]} alt={p.name} style={{ width: 50, height: 50, borderRadius: '8px', objectFit: 'cover', border: '1px solid #e5e7eb' }} />
-                    ) : (
-                      <div style={{ width: 50, height: 50, borderRadius: '8px', background: '#f3f4f6', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: '#6b7280' }}>◈</div>
-                    )}
-                    <div style={{ flex: 1 }}>
-                      <h3 style={{ fontSize: '15px', fontWeight: 600, margin: '0 0 4px 0' }}>{p.name}</h3>
-                      <p style={{ fontSize: '12px', color: '#6b7280' }}>SKU: <code style={{ background: '#f3f4f6', padding: '1px 4px', borderRadius: 4 }}>{p.sku}</code></p>
-                    </div>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px', fontSize: '13px' }}>
-                    <div style={{ background: '#f9fafb', padding: '8px', borderRadius: '6px' }}><span>Cost</span><p>Rs{displayCost.toLocaleString()}</p></div>
-                    <div style={{ background: '#f9fafb', padding: '8px', borderRadius: '6px' }}><span>Price</span><p>Rs{displayPrice.toLocaleString()}</p></div>
-                    <div style={{ background: parseFloat(margin) > 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)', padding: '8px', borderRadius: '6px' }}><span>Margin</span><p style={{ color: parseFloat(margin) > 0 ? '#10b981' : '#ef4444' }}>{margin}%</p></div>
-                    <div style={{ background: '#f9fafb', padding: '8px', borderRadius: '6px' }}><StockBadge qty={stock} /></div>
-                  </div>
-                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                    <button className="btn btn-ghost btn-sm" onClick={() => openEdit(p)}>Edit</button>
-                    <button className="btn btn-success btn-sm" onClick={() => downloadBarcode(p.sku)}>Barcode</button>
-                    <button className="btn btn-danger btn-sm" onClick={() => handleDelete(p._id, p.name)}>Delete</button>
-                  </div>
+          {filtered.map(p => (
+            <div key={p._id} className="product-card" style={{ display: 'block' }}>
+              <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
+                {p.images && p.images[0] ? (
+                  <img src={p.images[0]} alt={p.name} style={{ width: 50, height: 50, borderRadius: '8px', objectFit: 'cover', border: '1px solid #e5e7eb' }} />
+                ) : (
+                  <div style={{ width: 50, height: 50, borderRadius: '8px', background: '#f3f4f6', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: '#6b7280' }}>◈</div>
+                )}
+                <div style={{ flex: 1 }}>
+                  <h3 style={{ fontSize: '15px', fontWeight: 600, margin: '0 0 4px 0' }}>{p.name}</h3>
+                  <p style={{ fontSize: '12px', color: '#6b7280' }}>SKU: <code style={{ background: '#f3f4f6', padding: '1px 4px', borderRadius: 4 }}>{p.sku}</code></p>
                 </div>
-              );
-            })
-          )}
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px', fontSize: '13px' }}>
+                <div style={{ gridColumn: 'span 2', background: '#f9fafb', padding: '8px', borderRadius: '6px' }}>
+                  <span style={{ color: '#6b7280', fontSize: '12px', fontWeight: 500 }}>Prices</span>
+                  {p.variants?.map(v => (
+                    <p key={v.size} style={{ margin: '2px 0 0 0' }}>
+                      {v.size}: Rs{(v.sellingPrice || 0).toLocaleString()}
+                    </p>
+                  )) || <p style={{ margin: 0 }}>Rs0</p>}
+                </div>
+                <div style={{ gridColumn: 'span 2', background: '#f9fafb', padding: '8px', borderRadius: '6px' }}>
+                  <span style={{ color: '#6b7280', fontSize: '12px', fontWeight: 500 }}>Stock</span>
+                  <p style={{ margin: '2px 0 0 0' }}>
+                    {p.variants?.map(v => `${v.size}: ${v.quantity}`).join('  ') || '0'}
+                  </p>
+                </div>
+                <div style={{ gridColumn: 'span 2', background: '#f9fafb', padding: '8px', borderRadius: '6px' }}>
+                  <span style={{ color: '#6b7280', fontSize: '12px', fontWeight: 500 }}>Margins</span>
+                  {p.variants?.map(v => {
+                    const margin = v.sellingPrice && v.costPrice
+                      ? (((v.sellingPrice - v.costPrice) / v.sellingPrice) * 100).toFixed(1)
+                      : '0';
+                    return (
+                      <p key={v.size} style={{ color: parseFloat(margin) > 0 ? '#10b981' : '#ef4444', margin: '2px 0 0 0', fontWeight: 600 }}>
+                        {v.size}: {margin}%
+                      </p>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                <button className="btn btn-ghost btn-sm" onClick={() => openEdit(p)}>Edit</button>
+                <button className="btn btn-success btn-sm" onClick={() => downloadBarcode(p.sku)}>Barcode</button>
+                <button className="btn btn-danger btn-sm" onClick={() => handleDelete(p._id, p.name)}>Delete</button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
