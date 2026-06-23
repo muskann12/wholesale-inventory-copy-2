@@ -50,16 +50,32 @@ export default async function handler(req, res) {
   ]);
   const totalSold = soldAgg[0]?.totalSold || 0;
 
- const stockAgg = await Product.aggregate([
-  { $unwind: '$variants' },
-  { $group: { _id: null, totalStock: { $sum: '$variants.quantity' } } }
-]);
-const remainingStock = stockAgg[0]?.totalStock || 0;
+  const stockAgg = await Product.aggregate([
+    { $unwind: '$variants' },
+    { $group: { _id: null, totalStock: { $sum: '$variants.quantity' } } }
+  ]);
+  const remainingStock = stockAgg[0]?.totalStock || 0;
+
+  // Stock cost: remaining quantity * costPrice per variant
+  const stockCostAgg = await Product.aggregate([
+    { $unwind: '$variants' },
+    {
+      $group: {
+        _id: null,
+        stockCost: {
+          $sum: { $multiply: ['$variants.quantity', '$variants.costPrice'] }
+        }
+      }
+    }
+  ]);
+  const stockCost = stockCostAgg[0]?.stockCost || 0;
+
   res.status(200).json({
     totalRevenue,
     totalProfit,
     totalSold,
     remainingStock,
+    stockCost,
     dailyData,
     days
   });
