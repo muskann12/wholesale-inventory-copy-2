@@ -6,7 +6,6 @@ import ProductPopup from '../components/ProductPopup';
 export default function MobileScanPage() {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
-  const debugCanvasRef = useRef(null); // for visual debugging
   const inputRef = useRef(null);
   const [product, setProduct] = useState(null);
   const [status, setStatus] = useState('Starting camera...');
@@ -52,17 +51,9 @@ export default function MobileScanPage() {
         canvas.height = videoRef.current.videoHeight;
         if (canvas.width === 0 || canvas.height === 0) return;
         context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-        
-        // Also draw on debug canvas (optional)
-        if (debugCanvasRef.current) {
-          const debugCtx = debugCanvasRef.current.getContext('2d');
-          debugCtx.drawImage(canvas, 0, 0, 640, 480);
-        }
-
         try {
-          // Get image data for decoding
-          const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-          const result = await reader.decodeFromImageData(imageData);
+          // Use decodeFromCanvas with the canvas element
+          const result = await reader.decodeFromCanvas(canvas);
           if (result) {
             const barcodeValue = result.getText();
             setScanned(barcodeValue);
@@ -115,10 +106,8 @@ export default function MobileScanPage() {
     canvas.width = videoRef.current.videoWidth;
     canvas.height = videoRef.current.videoHeight;
     context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-    
     try {
-      const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-      const result = await readerRef.current.decodeFromImageData(imageData);
+      const result = await readerRef.current.decodeFromCanvas(canvas);
       if (result) {
         const barcodeValue = result.getText();
         setScanned(barcodeValue);
@@ -189,8 +178,7 @@ export default function MobileScanPage() {
         if (canvas.width === 0 || canvas.height === 0) return;
         context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
         try {
-          const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-          const result = await readerRef.current.decodeFromImageData(imageData);
+          const result = await readerRef.current.decodeFromCanvas(canvas);
           if (result) {
             const barcodeValue = result.getText();
             setScanned(barcodeValue);
@@ -222,7 +210,6 @@ export default function MobileScanPage() {
       <div style={{ background: '#000', borderRadius: '12px', overflow: 'hidden' }}>
         <video ref={videoRef} style={{ width: '100%', height: 'auto' }} playsInline muted />
         <canvas ref={canvasRef} style={{ display: 'none' }} />
-        <canvas ref={debugCanvasRef} style={{ width: '100%', height: 'auto', marginTop: '10px', border: '1px solid red' }} />
       </div>
       <div style={{ marginTop: '10px', display: 'flex', gap: '10px' }}>
         <button onClick={captureNow} style={{ padding: '10px', background: '#f59e0b', color: '#000', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
