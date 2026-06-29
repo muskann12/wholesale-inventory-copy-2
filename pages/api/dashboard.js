@@ -14,7 +14,7 @@ export default async function handler(req, res) {
   startDate.setDate(startDate.getDate() - days);
   startDate.setHours(0, 0, 0, 0);
 
-  // Daily sales aggregation
+  // --- Daily Sales Aggregation (all sales) ---
   const dailySales = await Sale.aggregate([
     { $match: { createdAt: { $gte: startDate } } },
     {
@@ -31,14 +31,13 @@ export default async function handler(req, res) {
     { $sort: { '_id.year': 1, '_id.month': 1, '_id.day': 1 } }
   ]);
 
-  // Format daily data
   const dailyData = dailySales.map(d => ({
     date: `${d._id.year}-${String(d._id.month).padStart(2, '0')}-${String(d._id.day).padStart(2, '0')}`,
     revenue: d.revenue,
     profit: d.profit
   }));
 
-  // Total aggregates (for stats cards)
+  // --- Overall Sales Aggregates ---
   const salesAgg = await Sale.aggregate([
     { $group: { _id: null, totalRevenue: { $sum: '$revenue' }, totalProfit: { $sum: '$profit' } } }
   ]);
@@ -50,14 +49,17 @@ export default async function handler(req, res) {
   ]);
   const totalSold = soldAgg[0]?.totalSold || 0;
 
-  const stockAgg = await Product.aggregate([
+  // --- Regular Product Stock (variants) ---
+  const regularStockAgg = await Product.aggregate([
+    { $match: { isRawCloth: { $ne: true } } },
     { $unwind: '$variants' },
     { $group: { _id: null, totalStock: { $sum: '$variants.quantity' } } }
   ]);
-  const remainingStock = stockAgg[0]?.totalStock || 0;
+  const regularStock = regularStockAgg[0]?.totalStock || 0;
 
-  // Stock cost: remaining quantity * costPrice per variant
+  // --- Regular Product Stock Cost ---
   const stockCostAgg = await Product.aggregate([
+    { $match: { isRawCloth: { $ne: true } } },
     { $unwind: '$variants' },
     {
       $group: {
@@ -70,12 +72,61 @@ export default async function handler(req, res) {
   ]);
   const stockCost = stockCostAgg[0]?.stockCost || 0;
 
+  // --- Raw Cloth Stock (single quantity field) ---
+  const rawClothStockAgg = await Product.aggregate([
+    { $match: { isRawCloth: true } },
+    { $group: { _id: null, totalStock: { $sum: '$quantity' } } }
+  ]);
+  const rawClothStock = rawClothStockAgg[0]?.totalStock || 0;
+
+  // --- Raw Cloth Stock Cost (optional, if needed) ---
+  const rawClothStockCostAgg = await Product.aggregate([
+    { $match: { isRawCloth: true } },
+    {
+      $group: {
+        _id: null,
+        stockCost: {
+          $sum: { $multiply: ['$quantity', '$costPrice'] }
+        }
+      }
+    }
+  ]);
+  const rawClothStockCost = rawClothStockCostAgg[0]?.stockCost || 0;
+
+  // --- Total stock (regular + raw cloth) ---
+  const totalStock = regularStock + rawClothStock;
+
+  // --- Raw Cloth Sales Metrics ---
+  const rawClothSalesAgg = await Sale.aggregate([
+    { $match: { isRawCloth: true } },
+    {
+      $group: {
+        _id: null,
+        revenue: { $sum: '$revenue' },
+        profit: { $sum: '$profit' },
+        qty: { $sum: '$quantity' }
+      }
+    }
+  ]);
+  const rawClothRevenue = rawClothSalesAgg[0]?.revenue || 0;
+  const rawClothProfit = rawClothSalesAgg[0]?.profit || 0;
+  const rawClothQuantitySold = rawClothSalesAgg[0]?.qty || 0;
+
+  // --- Regular Product Sales (optional for reference) ---
+  // Not needed separately, but we already have overall totals.
+
   res.status(200).json({
     totalRevenue,
     totalProfit,
     totalSold,
-    remainingStock,
+    totalStock,
+    regularStock,
+    rawClothStock,
     stockCost,
+    rawClothStockCost,
+    rawClothRevenue,
+    rawClothProfit,
+    rawClothQuantitySold,
     dailyData,
     days
   });

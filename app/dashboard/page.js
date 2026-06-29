@@ -16,7 +16,9 @@ import {
   ShoppingBag,
   Coins,
   Activity,
-  Wallet
+  Wallet,
+  Ruler,
+  Layers
 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useAuth } from '../hooks/useAuth';
@@ -61,8 +63,14 @@ export default function DashboardPage() {
     totalRevenue: 0,
     totalProfit: 0,
     totalSold: 0,
-    remainingStock: 0,
+    totalStock: 0,
+    regularStock: 0,
+    rawClothStock: 0,
     stockCost: 0,
+    rawClothStockCost: 0,
+    rawClothRevenue: 0,
+    rawClothProfit: 0,
+    rawClothQuantitySold: 0,
     dailyData: []
   });
   const [days, setDays] = useState(30);
@@ -101,9 +109,8 @@ export default function DashboardPage() {
     ? ((data.totalProfit / data.totalRevenue) * 100).toFixed(1)
     : 0;
 
-  // Softer, more modern colors
-  const revenueColor = isDark ? '#fbbf24' : '#eab308'; // amber
-  const profitColor = isDark ? '#34d399' : '#10b981';  // emerald
+  const revenueColor = isDark ? '#fbbf24' : '#eab308';
+  const profitColor = isDark ? '#34d399' : '#10b981';
   const gridColor = isDark ? '#374151' : '#e5e7eb';
 
   return (
@@ -120,16 +127,64 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* STATS */}
+      {/* Row 1: Overall Stats */}
       <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard title="Revenue" value={`Rs${data.totalRevenue.toLocaleString()}`} sub="All time" icon={Coins} color="#eab308" />
         <StatCard title="Profit" value={`Rs${data.totalProfit.toLocaleString()}`} sub={`${profitMargin}% margin`} icon={TrendingUp} color="#10b981" />
-        <StatCard title="Sold" value={data.totalSold.toLocaleString()} sub="Units" icon={ShoppingBag} color="#3b82f6" />
-        <StatCard title="Stock" value={data.remainingStock.toLocaleString()} sub="Available" icon={Package} color="#8b5cf6" />
-        <StatCard title="Stock Cost" value={`Rs${(data.stockCost ?? 0).toLocaleString()}`} sub="Remaining inventory" icon={Wallet} color="#f43f5e" />
+        <StatCard title="Units Sold" value={data.totalSold.toLocaleString()} sub="All items" icon={ShoppingBag} color="#3b82f6" />
+        <StatCard title="Total Stock" value={data.totalStock.toLocaleString()} sub="All products" icon={Package} color="#8b5cf6" />
+        <StatCard title="Stock Cost" value={`Rs${(data.stockCost + data.rawClothStockCost).toLocaleString()}`} sub="Total inventory value" icon={Wallet} color="#f43f5e" />
       </div>
 
-      {/* CHART with range buttons */}
+      {/* Row 2: Raw Cloth Stats */}
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900/60">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wider text-gray-500">Raw Cloth Stock</p>
+              <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">{data.rawClothStock.toLocaleString()} m</p>
+            </div>
+            <div className="rounded-xl p-2" style={{ backgroundColor: '#f9731615', color: '#f97316' }}>
+              <Ruler className="h-5 w-5" />
+            </div>
+          </div>
+        </div>
+        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900/60">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wider text-gray-500">Raw Cloth Sold</p>
+              <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">{data.rawClothQuantitySold.toLocaleString()} m</p>
+            </div>
+            <div className="rounded-xl p-2" style={{ backgroundColor: '#8b5cf615', color: '#8b5cf6' }}>
+              <Layers className="h-5 w-5" />
+            </div>
+          </div>
+        </div>
+        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900/60">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wider text-gray-500">Raw Cloth Revenue</p>
+              <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">Rs{data.rawClothRevenue.toLocaleString()}</p>
+            </div>
+            <div className="rounded-xl p-2" style={{ backgroundColor: '#f59e0b15', color: '#f59e0b' }}>
+              <Coins className="h-5 w-5" />
+            </div>
+          </div>
+        </div>
+        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900/60">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wider text-gray-500">Raw Cloth Profit</p>
+              <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">Rs{data.rawClothProfit.toLocaleString()}</p>
+            </div>
+            <div className="rounded-xl p-2" style={{ backgroundColor: '#10b98115', color: '#10b981' }}>
+              <TrendingUp className="h-5 w-5" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* CHART */}
       <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900/60">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -164,35 +219,16 @@ export default function DashboardPage() {
                 <XAxis
                   dataKey="date"
                   tick={{ fontSize: 11, fill: isDark ? '#9ca3af' : '#6b7280' }}
-                  tickFormatter={(tick) => tick.slice(5)} // show MM-DD
+                  tickFormatter={(tick) => tick.slice(5)}
                 />
                 <YAxis
                   tick={{ fontSize: 11, fill: isDark ? '#9ca3af' : '#6b7280' }}
                   tickFormatter={(value) => `Rs${(value / 1000).toFixed(0)}k`}
                 />
                 <Tooltip content={<CustomTooltip />} />
-                <Legend
-                  wrapperStyle={{ fontSize: 12, paddingTop: 10 }}
-                  iconType="circle"
-                />
-                <Line
-                  type="monotone"
-                  dataKey="revenue"
-                  stroke={revenueColor}
-                  strokeWidth={2.5}
-                  dot={false}
-                  activeDot={{ r: 5 }}
-                  name="Revenue"
-                />
-                <Line
-                  type="monotone"
-                  dataKey="profit"
-                  stroke={profitColor}
-                  strokeWidth={2.5}
-                  dot={false}
-                  activeDot={{ r: 5 }}
-                  name="Profit"
-                />
+                <Legend wrapperStyle={{ fontSize: 12, paddingTop: 10 }} iconType="circle" />
+                <Line type="monotone" dataKey="revenue" stroke={revenueColor} strokeWidth={2.5} dot={false} activeDot={{ r: 5 }} name="Revenue" />
+                <Line type="monotone" dataKey="profit" stroke={profitColor} strokeWidth={2.5} dot={false} activeDot={{ r: 5 }} name="Profit" />
               </LineChart>
             </ResponsiveContainer>
           )}

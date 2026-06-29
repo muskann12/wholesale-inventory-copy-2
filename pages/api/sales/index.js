@@ -23,35 +23,60 @@ export default async function handler(req, res) {
 
   // POST – create sale (physical store)
   if (req.method === 'POST') {
-    let { productId, size, quantity = 1, customSellingPrice } = req.body;
-    if (!size) return res.status(400).json({ error: 'Size is required' });
+    let { productId, size, quantity = 1, customSellingPrice, isRawCloth } = req.body;
+    quantity = parseFloat(quantity) || 0;
 
     const product = await Product.findById(productId);
     if (!product) return res.status(404).json({ error: 'Product not found' });
 
-    const variant = product.variants.find(v => v.size === size);
-    if (!variant) return res.status(404).json({ error: `Size "${size}" not found` });
-    if (variant.quantity < quantity) return res.status(400).json({ error: `Insufficient stock for size ${size}` });
+    // Determine if this is a raw cloth product (either flag set)
+    const raw = isRawCloth || product.isRawCloth || false;
 
-    const sellingPrice = customSellingPrice && customSellingPrice > 0 ? customSellingPrice : variant.sellingPrice;
-    const revenue = sellingPrice * quantity;
-    const profit = (sellingPrice - variant.costPrice) * quantity;
+    let sellingPrice, costPrice, finalQuantity, stockKey;
 
-    variant.quantity -= quantity;
-    await product.save();
+    if (raw) {
+      // Raw cloth: use single fields, allow decimal quantity
+      if (product.quantity < quantity) return res.status(400).json({ error: 'Insufficient stock' });
+      sellingPrice = customSellingPrice && customSellingPrice > 0 ? customSellingPrice : product.sellingPrice;
+      costPrice = product.costPrice;
+      product.quantity -= quantity;
+      await product.save();
+      finalQuantity = quantity;
+      stockKey = product.quantity;
+      // No Shopify sync for raw cloth
+    } else {
+      // Normal product with variants
+      if (!size) return res.status(400).json({ error: 'Size is required' });
+      if (!Number.isInteger(quantity) || quantity < 1) {
+        return res.status(400).json({ error: 'Quantity must be a whole number' });
+      }
+      const variant = product.variants.find(v => v.size === size);
+      if (!variant) return res.status(404).json({ error: `Size "${size}" not found` });
+      if (variant.quantity < quantity) return res.status(400).json({ error: `Insufficient stock for size ${size}` });
+      sellingPrice = customSellingPrice && customSellingPrice > 0 ? customSellingPrice : variant.sellingPrice;
+      costPrice = variant.costPrice;
+      variant.quantity -= quantity;
+      await product.save();
+      finalQuantity = quantity;
+      stockKey = variant.quantity;
+      // Update Shopify inventory
+      updateShopifyInventory(product.sku, size, stockKey).catch(err => console.error('Shopify inventory sync error:', err));
+    }
+
+    const revenue = sellingPrice * finalQuantity;
+    const profit = (sellingPrice - costPrice) * finalQuantity;
 
     await Sale.create({
       productId: product._id,
-      size,
-      quantity,
+      size: raw ? null : size,
+      quantity: finalQuantity,
       revenue,
       profit,
       source: 'physical',
+      isRawCloth: raw,
     });
 
-    updateShopifyInventory(product.sku, size, variant.quantity).catch(err => console.error('Shopify inventory sync error:', err));
-
-    return res.status(200).json({ success: true, newStock: variant.quantity });
+    return res.status(200).json({ success: true, newStock: stockKey });
   }
 
   // DELETE – remove a sale and restore stock
@@ -62,7 +87,7 @@ export default async function handler(req, res) {
     const sale = await Sale.findById(id);
     if (!sale) return res.status(404).json({ error: 'Sale not found' });
 
-    // Only allow deletion for physical sales (Shopify orders should not be deleted)
+    // Only allow deletion for physical sales
     if (sale.source !== 'physical') {
       return res.status(403).json({ error: 'Cannot delete Shopify orders from here' });
     }
@@ -70,16 +95,21 @@ export default async function handler(req, res) {
     const product = await Product.findById(sale.productId);
     if (!product) return res.status(404).json({ error: 'Product not found' });
 
-    const variant = product.variants.find(v => v.size === sale.size);
-    if (variant) {
-      // Restore stock
-      variant.quantity += sale.quantity;
+    if (sale.isRawCloth) {
+      // Raw cloth: restore stock from product.quantity
+      product.quantity += sale.quantity;
       await product.save();
-
-      // Update Shopify inventory (increase)
-      updateShopifyInventory(product.sku, sale.size, variant.quantity).catch(err =>
-        console.error('Shopify inventory restore error:', err)
-      );
+      // No Shopify sync needed
+    } else {
+      // Normal product: restore variant stock
+      const variant = product.variants.find(v => v.size === sale.size);
+      if (variant) {
+        variant.quantity += sale.quantity;
+        await product.save();
+        updateShopifyInventory(product.sku, sale.size, variant.quantity).catch(err =>
+          console.error('Shopify inventory restore error:', err)
+        );
+      }
     }
 
     await Sale.findByIdAndDelete(id);

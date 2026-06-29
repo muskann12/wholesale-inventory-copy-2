@@ -10,6 +10,7 @@ const EMPTY_FORM = {
   costPrice: '',
   description: '',
   images: [],
+  isRawCloth: false,
   variants: [
     { size: 'Small', costPrice: '', sellingPrice: '', quantity: '' },
     { size: 'Medium', costPrice: '', sellingPrice: '', quantity: '' },
@@ -92,8 +93,21 @@ function ProductModal({ mode, form, setForm, onClose, onSubmit, loading }) {
             >+ Add another image</button>
           </div>
 
-          {/* S/M/L Variants — Always Shown, Always Required */}
-          {form.variants && form.variants.map((variant, idx) => {
+          {/* Raw Cloth Toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px', background: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+            <input
+              type="checkbox"
+              id="isRawCloth"
+              checked={form.isRawCloth || false}
+              onChange={(e) => setForm({ ...form, isRawCloth: e.target.checked })}
+            />
+            <label htmlFor="isRawCloth" style={{ fontWeight: 500, color: '#374151' }}>
+              Raw Cloth (sold by meter – no Shopify sync)
+            </label>
+          </div>
+
+          {/* S/M/L Variants — only if NOT raw cloth */}
+          {!form.isRawCloth && form.variants && form.variants.map((variant, idx) => {
             const margin = calculateMargin(variant.sellingPrice, variant.costPrice);
             return (
               <div key={variant.size} style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', background: '#f9fafb' }}>
@@ -126,6 +140,26 @@ function ProductModal({ mode, form, setForm, onClose, onSubmit, loading }) {
               </div>
             );
           })}
+
+          {/* Raw cloth single fields */}
+          {form.isRawCloth && (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label className="lbl">Cost Price (per meter)</label>
+                  <input className="inp" type="number" value={form.costPrice ?? ''} onChange={e => setForm({ ...form, costPrice: parseFloat(e.target.value) || '' })} required />
+                </div>
+                <div>
+                  <label className="lbl">Selling Price (per meter)</label>
+                  <input className="inp" type="number" value={form.sellingPrice ?? ''} onChange={e => setForm({ ...form, sellingPrice: parseFloat(e.target.value) || '' })} required />
+                </div>
+              </div>
+              <div>
+                <label className="lbl">Stock (meters)</label>
+                <input className="inp" type="number" value={form.quantity ?? ''} onChange={e => setForm({ ...form, quantity: parseInt(e.target.value) || '' })} required />
+              </div>
+            </>
+          )}
         </div>
 
         <div style={{ display: 'flex', gap: '10px', marginTop: '24px' }}>
@@ -139,7 +173,12 @@ function ProductModal({ mode, form, setForm, onClose, onSubmit, loading }) {
   );
 }
 
-function StockBadge({ variants }) {
+function StockBadge({ variants, isRawCloth, quantity }) {
+  if (isRawCloth) {
+    const q = parseInt(quantity) || 0;
+    if (q === 0) return <span className="badge badge-red">Out of stock</span>;
+    return <span className="badge badge-green" style={{ background: '#e0f2e7', color: '#166534' }}>{q}m</span>;
+  }
   if (!variants || variants.length === 0) return <span className="badge badge-red">No stock</span>;
   const total = variants.reduce((sum, v) => sum + (parseInt(v.quantity) || 0), 0);
   if (total === 0) return <span className="badge badge-red">Out of stock</span>;
@@ -189,8 +228,11 @@ export default function ProductsPage() {
       name: p.name || '',
       sku: p.sku || '',
       costPrice: p.costPrice || 0,
+      sellingPrice: p.sellingPrice || 0,
+      quantity: p.quantity || 0,
       description: p.description || '',
       images: p.images || [],
+      isRawCloth: p.isRawCloth || false,
       variants: variants,
     });
     setEditId(p._id);
@@ -202,19 +244,37 @@ export default function ProductsPage() {
   const handleSubmit = async () => {
     setLoading(true);
     try {
-      const variantsToSend = form.variants.map(v => ({
-        size: v.size,
-        costPrice: Number(v.costPrice) || 0,
-        sellingPrice: Number(v.sellingPrice) || 0,
-        quantity: Number(v.quantity) || 0,
-      }));
+      let variantsToSend = [];
+      let costPrice = Number(form.costPrice) || 0;
+      let sellingPrice = Number(form.sellingPrice) || 0;
+      let quantity = Number(form.quantity) || 0;
+
+      if (form.isRawCloth) {
+        // Raw cloth: no variants, use single fields directly
+      } else {
+        // Normal product: use variants
+        variantsToSend = form.variants.map(v => ({
+          size: v.size,
+          costPrice: Number(v.costPrice) || 0,
+          sellingPrice: Number(v.sellingPrice) || 0,
+          quantity: Number(v.quantity) || 0,
+        }));
+        // derive legacy fields from Medium variant
+        const medium = variantsToSend.find(v => v.size === 'Medium');
+        costPrice = medium?.costPrice || 0;
+        sellingPrice = medium?.sellingPrice || 0;
+        quantity = medium?.quantity || 0;
+      }
 
       const payload = {
         name: form.name,
         sku: form.sku,
-        costPrice: Number(form.variants[1]?.costPrice) || 0,
+        costPrice,
+        sellingPrice,
+        quantity,
         description: form.description || '',
         images: form.images || [],
+        isRawCloth: form.isRawCloth || false,
         variants: variantsToSend,
       };
 
@@ -374,58 +434,80 @@ export default function ProductsPage() {
                           ) : (
                             <div style={{ width: 40, height: 40, borderRadius: '8px', background: '#f3f4f6', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, color: '#6b7280' }}>◈</div>
                           )}
-                          <span style={{ fontWeight: 500 }}>{p.name}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontWeight: 500 }}>{p.name}</span>
+                            {p.isRawCloth && (
+                              <span style={{ background: '#f59e0b', color: '#000', padding: '2px 8px', borderRadius: '20px', fontSize: '10px', fontWeight: 600 }}>Raw</span>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td>
                         <code style={{ color: '#6b7280', fontSize: 13, background: '#f3f4f6', padding: '2px 8px', borderRadius: 6 }}>{p.sku}</code>
                       </td>
                       <td style={{ fontSize: '13px' }}>
-                        {p.variants?.map(v => (
-                          <div key={v.size} style={{ color: '#6b7280', lineHeight: '1.8' }}>
-                            {v.size}: Rs{(v.costPrice || 0).toLocaleString()}
-                          </div>
-                        )) || <span style={{ color: '#6b7280' }}>Rs0</span>}
-                      </td>
-                      <td style={{ fontSize: '13px' }}>
-                        {p.variants?.map(v => (
-                          <div key={v.size} style={{ fontWeight: 500, lineHeight: '1.8' }}>
-                            {v.size}: Rs{(v.sellingPrice || 0).toLocaleString()}
-                          </div>
-                        )) || <span>Rs0</span>}
-                      </td>
-                      <td style={{ fontSize: '13px' }}>
-                        {p.variants?.map(v => {
-                          const margin = v.sellingPrice && v.costPrice
-                            ? (((v.sellingPrice - v.costPrice) / v.sellingPrice) * 100).toFixed(1)
-                            : '0';
-                          return (
-                            <div key={v.size} style={{ color: parseFloat(margin) > 0 ? '#10b981' : '#ef4444', fontWeight: 600, lineHeight: '1.8' }}>
-                              {v.size}: {margin}%
+                        {p.isRawCloth ? (
+                          <div style={{ color: '#6b7280', lineHeight: '1.8' }}>Rs{(p.costPrice || 0).toLocaleString()}/m</div>
+                        ) : (
+                          p.variants?.map(v => (
+                            <div key={v.size} style={{ color: '#6b7280', lineHeight: '1.8' }}>
+                              {v.size}: Rs{(v.costPrice || 0).toLocaleString()}
                             </div>
-                          );
-                        })}
+                          )) || <span style={{ color: '#6b7280' }}>Rs0</span>
+                        )}
+                      </td>
+                      <td style={{ fontSize: '13px' }}>
+                        {p.isRawCloth ? (
+                          <div style={{ fontWeight: 500, lineHeight: '1.8' }}>Rs{(p.sellingPrice || 0).toLocaleString()}/m</div>
+                        ) : (
+                          p.variants?.map(v => (
+                            <div key={v.size} style={{ fontWeight: 500, lineHeight: '1.8' }}>
+                              {v.size}: Rs{(v.sellingPrice || 0).toLocaleString()}
+                            </div>
+                          )) || <span>Rs0</span>
+                        )}
+                      </td>
+                      <td style={{ fontSize: '13px' }}>
+                        {p.isRawCloth ? (() => {
+                          const margin = p.sellingPrice && p.costPrice
+                            ? (((p.sellingPrice - p.costPrice) / p.sellingPrice) * 100).toFixed(1)
+                            : '0';
+                          return <div style={{ color: parseFloat(margin) > 0 ? '#10b981' : '#ef4444', fontWeight: 600 }}>{margin}%</div>;
+                        })() : (
+                          p.variants?.map(v => {
+                            const margin = v.sellingPrice && v.costPrice
+                              ? (((v.sellingPrice - v.costPrice) / v.sellingPrice) * 100).toFixed(1)
+                              : '0';
+                            return (
+                              <div key={v.size} style={{ color: parseFloat(margin) > 0 ? '#10b981' : '#ef4444', fontWeight: 600, lineHeight: '1.8' }}>
+                                {v.size}: {margin}%
+                              </div>
+                            );
+                          })
+                        )}
                       </td>
                       <td>
-                        <StockBadge variants={p.variants} />
+                        <StockBadge variants={p.variants} isRawCloth={p.isRawCloth} quantity={p.quantity} />
                       </td>
                       <td>
                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                           <button className="btn btn-ghost btn-sm" onClick={() => openEdit(p)}>Edit</button>
                           <button className="btn btn-success btn-sm" onClick={() => downloadBarcode(p.sku)}>Barcode</button>
-                          <button
-                            onClick={async () => {
-                              if (!confirm(`Sync "${p.name}" to Shopify?`)) return;
-                              try {
-                                const res = await fetch(`/api/products/${p._id}/sync`, { method: 'POST' });
-                                const data = await res.json();
-                                if (res.ok) { alert('✅ Synced successfully!'); fetchProducts(); }
-                                else { alert('❌ ' + (data.error || 'Sync failed')); }
-                              } catch (err) { alert('Network error'); }
-                            }}
-                            className="btn btn-primary btn-sm"
-                            style={{ background: '#f59e0b', color: '#000' }}
-                          >Sync</button>
+                          {!p.isRawCloth && (
+                            <button
+                              onClick={async () => {
+                                if (!confirm(`Sync "${p.name}" to Shopify?`)) return;
+                                try {
+                                  const res = await fetch(`/api/products/${p._id}/sync`, { method: 'POST' });
+                                  const data = await res.json();
+                                  if (res.ok) { alert('✅ Synced successfully!'); fetchProducts(); }
+                                  else { alert('❌ ' + (data.error || 'Sync failed')); }
+                                } catch (err) { alert('Network error'); }
+                              }}
+                              className="btn btn-primary btn-sm"
+                              style={{ background: '#f59e0b', color: '#000' }}
+                            >Sync</button>
+                          )}
                           <button className="btn btn-danger btn-sm" onClick={() => handleDelete(p._id, p.name)}>Delete</button>
                         </div>
                       </td>
@@ -450,7 +532,10 @@ export default function ProductsPage() {
                   <div style={{ width: 50, height: 50, borderRadius: '8px', background: '#f3f4f6', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: '#6b7280' }}>◈</div>
                 )}
                 <div style={{ flex: 1 }}>
-                  <h3 style={{ fontSize: '15px', fontWeight: 600, margin: '0 0 4px 0' }}>{p.name}</h3>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <h3 style={{ fontSize: '15px', fontWeight: 600, margin: '0 0 4px 0' }}>{p.name}</h3>
+                    {p.isRawCloth && <span style={{ background: '#f59e0b', color: '#000', padding: '2px 8px', borderRadius: '20px', fontSize: '10px', fontWeight: 600 }}>Raw</span>}
+                  </div>
                   <p style={{ fontSize: '12px', color: '#6b7280' }}>SKU: <code style={{ background: '#f3f4f6', padding: '1px 4px', borderRadius: 4 }}>{p.sku}</code></p>
                 </div>
               </div>
@@ -458,30 +543,44 @@ export default function ProductsPage() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px', fontSize: '13px' }}>
                 <div style={{ gridColumn: 'span 2', background: '#f9fafb', padding: '8px', borderRadius: '6px' }}>
                   <span style={{ color: '#6b7280', fontSize: '12px', fontWeight: 500 }}>Prices</span>
-                  {p.variants?.map(v => (
-                    <p key={v.size} style={{ margin: '2px 0 0 0' }}>
-                      {v.size}: Rs{(v.sellingPrice || 0).toLocaleString()}
-                    </p>
-                  )) || <p style={{ margin: 0 }}>Rs0</p>}
+                  {p.isRawCloth ? (
+                    <p style={{ margin: '2px 0 0 0' }}>Rs{(p.sellingPrice || 0).toLocaleString()}/m</p>
+                  ) : (
+                    p.variants?.map(v => (
+                      <p key={v.size} style={{ margin: '2px 0 0 0' }}>
+                        {v.size}: Rs{(v.sellingPrice || 0).toLocaleString()}
+                      </p>
+                    )) || <p style={{ margin: 0 }}>Rs0</p>
+                  )}
                 </div>
                 <div style={{ gridColumn: 'span 2', background: '#f9fafb', padding: '8px', borderRadius: '6px' }}>
                   <span style={{ color: '#6b7280', fontSize: '12px', fontWeight: 500 }}>Stock</span>
                   <p style={{ margin: '2px 0 0 0' }}>
-                    {p.variants?.map(v => `${v.size}: ${v.quantity}`).join('  ') || '0'}
+                    {p.isRawCloth
+                      ? `${p.quantity || 0} meters`
+                      : p.variants?.map(v => `${v.size}: ${v.quantity}`).join('  ') || '0'
+                    }
                   </p>
                 </div>
                 <div style={{ gridColumn: 'span 2', background: '#f9fafb', padding: '8px', borderRadius: '6px' }}>
                   <span style={{ color: '#6b7280', fontSize: '12px', fontWeight: 500 }}>Margins</span>
-                  {p.variants?.map(v => {
-                    const margin = v.sellingPrice && v.costPrice
-                      ? (((v.sellingPrice - v.costPrice) / v.sellingPrice) * 100).toFixed(1)
+                  {p.isRawCloth ? (() => {
+                    const margin = p.sellingPrice && p.costPrice
+                      ? (((p.sellingPrice - p.costPrice) / p.sellingPrice) * 100).toFixed(1)
                       : '0';
-                    return (
-                      <p key={v.size} style={{ color: parseFloat(margin) > 0 ? '#10b981' : '#ef4444', margin: '2px 0 0 0', fontWeight: 600 }}>
-                        {v.size}: {margin}%
-                      </p>
-                    );
-                  })}
+                    return <p style={{ color: parseFloat(margin) > 0 ? '#10b981' : '#ef4444', margin: '2px 0 0 0', fontWeight: 600 }}>{margin}%</p>;
+                  })() : (
+                    p.variants?.map(v => {
+                      const margin = v.sellingPrice && v.costPrice
+                        ? (((v.sellingPrice - v.costPrice) / v.sellingPrice) * 100).toFixed(1)
+                        : '0';
+                      return (
+                        <p key={v.size} style={{ color: parseFloat(margin) > 0 ? '#10b981' : '#ef4444', margin: '2px 0 0 0', fontWeight: 600 }}>
+                          {v.size}: {margin}%
+                        </p>
+                      );
+                    })
+                  )}
                 </div>
               </div>
 

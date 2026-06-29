@@ -16,52 +16,65 @@ export default async function handler(req, res) {
 
   // POST – create a new product
   if (req.method === 'POST') {
-    let { name, sku, costPrice, description, images, variants } = req.body;
+    let { name, sku, costPrice, sellingPrice, quantity, description, images, variants, isRawCloth } = req.body;
 
     // Basic validation
     if (!name || !sku) {
       return res.status(400).json({ error: 'Missing name or SKU' });
     }
 
-    // Sanitize product-level costPrice
+    // Sanitize product-level fields
     const productCostPrice = (costPrice === '' || costPrice === null) ? 0 : Number(costPrice);
-
-    // Validate variants array
-    if (!variants || !Array.isArray(variants) || variants.length !== 3) {
-      return res.status(400).json({ error: 'Variants must contain Small, Medium, Large' });
-    }
-
-    // Sanitize each variant
-    const sanitizedVariants = variants.map(v => ({
-      size: v.size,
-      costPrice: (v.costPrice === '' || v.costPrice === null) ? 0 : Number(v.costPrice),
-      sellingPrice: (v.sellingPrice === '' || v.sellingPrice === null) ? 0 : Number(v.sellingPrice),
-      quantity: (v.quantity === '' || v.quantity === null) ? 0 : Number(v.quantity),
-    }));
+    const productSellingPrice = (sellingPrice === '' || sellingPrice === null) ? 0 : Number(sellingPrice);
+    const productQuantity = (quantity === '' || quantity === null) ? 0 : Number(quantity);
 
     // Check for duplicate SKU
     const existing = await Product.findOne({ sku });
     if (existing) return res.status(400).json({ error: 'SKU already exists' });
 
-    // Derive legacy fields from Medium variant (for backward compatibility)
-    const medium = sanitizedVariants.find(v => v.size === 'Medium');
-    const sellingPrice = medium?.sellingPrice || 0;
-    const quantity = medium?.quantity || 0;
+    let sanitizedVariants = [];
+    let finalSellingPrice = productSellingPrice;
+    let finalQuantity = productQuantity;
+
+    if (isRawCloth) {
+      // Raw cloth: use single fields, no variants needed
+      sanitizedVariants = [];
+    } else {
+      // Regular product: require variants
+      if (!variants || !Array.isArray(variants) || variants.length !== 3) {
+        return res.status(400).json({ error: 'Variants must contain Small, Medium, Large' });
+      }
+
+      sanitizedVariants = variants.map(v => ({
+        size: v.size,
+        costPrice: (v.costPrice === '' || v.costPrice === null) ? 0 : Number(v.costPrice),
+        sellingPrice: (v.sellingPrice === '' || v.sellingPrice === null) ? 0 : Number(v.sellingPrice),
+        quantity: (v.quantity === '' || v.quantity === null) ? 0 : Number(v.quantity),
+      }));
+
+      // Derive sellingPrice and quantity from Medium variant (for backward compatibility)
+      const medium = sanitizedVariants.find(v => v.size === 'Medium');
+      finalSellingPrice = medium?.sellingPrice || 0;
+      finalQuantity = medium?.quantity || 0;
+    }
 
     // Create product
     const product = await Product.create({
       name,
       sku,
       costPrice: productCostPrice,
+      sellingPrice: finalSellingPrice,
+      quantity: finalQuantity,
       description: description || '',
       images: images || [],
       variants: sanitizedVariants,
-      sellingPrice,
-      quantity,
+      isRawCloth: isRawCloth || false,
     });
 
-    // Sync to Shopify (non‑blocking)
-    syncProductToShopify(product).catch(err => console.error('Shopify sync error:', err));
+    // Sync to Shopify only if NOT raw cloth
+    if (!product.isRawCloth) {
+      syncProductToShopify(product).catch(err => console.error('Shopify sync error:', err));
+    }
 
     return res.status(201).json(product);
   }
