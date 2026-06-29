@@ -5,18 +5,56 @@ import ProductPopup from '../components/ProductPopup';
 
 export default function MobileScanPage() {
   const videoRef = useRef(null);
-  const inputRef = useRef(null); // for manual SKU input
+  const inputRef = useRef(null);
   const [product, setProduct] = useState(null);
   const [status, setStatus] = useState('Starting camera...');
   const [scanned, setScanned] = useState('');
   const readerRef = useRef(null);
+  const streamRef = useRef(null);
 
   useEffect(() => {
+    let isMounted = true;
     const reader = new BrowserMultiFormatReader();
     readerRef.current = reader;
 
-    // Start camera and scanning
+    const startCamera = async () => {
+      try {
+        // Stop any existing stream
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach(track => track.stop());
+          streamRef.current = null;
+        }
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' }
+        });
+        streamRef.current = stream;
+
+        if (videoRef.current && isMounted) {
+          videoRef.current.srcObject = stream;
+          // Wait for video to be ready before playing
+          videoRef.current.onloadedmetadata = () => {
+            if (videoRef.current && isMounted) {
+              videoRef.current.play().catch(err => {
+                console.warn('Video play interrupted:', err);
+              });
+            }
+          };
+          // Also handle autoplay if already loaded
+          if (videoRef.current.readyState >= 2) {
+            videoRef.current.play().catch(err => console.warn('Play failed:', err));
+          }
+        }
+        setStatus('Camera ready – scanning...');
+        startReader();
+      } catch (err) {
+        setStatus('❌ Camera access denied: ' + err.message);
+        console.error(err);
+      }
+    };
+
     const startReader = () => {
+      if (!videoRef.current || !isMounted) return;
       reader.decodeFromConstraints(
         { video: { facingMode: 'environment' } },
         videoRef.current,
@@ -32,42 +70,26 @@ export default function MobileScanPage() {
               .catch(() => alert('Product not found'));
           }
         }
-      ).catch(err => {
-        setStatus('❌ Camera error: ' + err.message);
-      });
+      ).catch(err => setStatus('❌ Scanner error: ' + err.message));
     };
 
-    startReader();
+    startCamera();
 
     return () => {
+      isMounted = false;
       if (readerRef.current) {
         try { readerRef.current.reset(); } catch (e) {}
       }
-      if (videoRef.current?.srcObject) {
-        videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+        videoRef.current.onloadedmetadata = null;
       }
     };
   }, []);
-
-  const restartScanning = () => {
-    if (!readerRef.current || !videoRef.current) return;
-    readerRef.current.decodeFromConstraints(
-      { video: { facingMode: 'environment' } },
-      videoRef.current,
-      (result, err) => {
-        if (result) {
-          const barcodeValue = result.getText();
-          setScanned(barcodeValue);
-          setStatus(`✅ Scanned: ${barcodeValue}`);
-          readerRef.current.reset();
-          fetch(`/api/barcode?sku=${encodeURIComponent(barcodeValue)}`, { credentials: 'include' })
-            .then(res => res.ok ? res.json() : Promise.reject())
-            .then(data => setProduct(data))
-            .catch(() => alert('Product not found'));
-        }
-      }
-    ).catch(() => {});
-  };
 
   const handleManualSubmit = async (e) => {
     const sku = e.target.value.trim();
@@ -107,7 +129,14 @@ export default function MobileScanPage() {
     setProduct(null);
     setScanned('');
     setStatus('Ready – scan again');
-    restartScanning();
+    // Restart reader without resetting video
+    if (readerRef.current && videoRef.current) {
+      readerRef.current.decodeFromConstraints(
+        { video: { facingMode: 'environment' } },
+        videoRef.current,
+        (result, err) => {}
+      );
+    }
   };
 
   return (
@@ -115,7 +144,7 @@ export default function MobileScanPage() {
       <h1>📱 Mobile Barcode Scanner</h1>
       <p>{status}</p>
       <div style={{ background: '#000', borderRadius: '12px', overflow: 'hidden' }}>
-        <video ref={videoRef} style={{ width: '100%', height: 'auto' }} />
+        <video ref={videoRef} style={{ width: '100%', height: 'auto' }} playsInline muted />
       </div>
       <div style={{ marginTop: '20px', padding: '16px', background: '#f9fafb', borderRadius: '8px' }}>
         <p><strong>Status:</strong> {status}</p>
