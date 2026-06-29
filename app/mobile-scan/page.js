@@ -32,21 +32,17 @@ export default function MobileScanPage() {
 
         if (videoRef.current && isMounted) {
           videoRef.current.srcObject = stream;
-          // Wait for video to be ready before playing
           videoRef.current.onloadedmetadata = () => {
             if (videoRef.current && isMounted) {
-              videoRef.current.play().catch(err => {
-                console.warn('Video play interrupted:', err);
-              });
+              videoRef.current.play().catch(err => console.warn('Play failed:', err));
             }
           };
-          // Also handle autoplay if already loaded
           if (videoRef.current.readyState >= 2) {
             videoRef.current.play().catch(err => console.warn('Play failed:', err));
           }
+          setStatus('Camera ready – scanning...');
+          startReader();
         }
-        setStatus('Camera ready – scanning...');
-        startReader();
       } catch (err) {
         setStatus('❌ Camera access denied: ' + err.message);
         console.error(err);
@@ -55,8 +51,9 @@ export default function MobileScanPage() {
 
     const startReader = () => {
       if (!videoRef.current || !isMounted) return;
-      reader.decodeFromConstraints(
-        { video: { facingMode: 'environment' } },
+
+      // Use decodeFromVideoElement for more reliable scanning
+      reader.decodeFromVideoElement(
         videoRef.current,
         (result, err) => {
           if (result) {
@@ -68,9 +65,18 @@ export default function MobileScanPage() {
               .then(res => res.ok ? res.json() : Promise.reject())
               .then(data => setProduct(data))
               .catch(() => alert('Product not found'));
+            // Restart scanning after a short delay
+            setTimeout(() => {
+              if (readerRef.current && videoRef.current) {
+                readerRef.current.decodeFromVideoElement(videoRef.current, (result, err) => {});
+              }
+            }, 500);
           }
         }
-      ).catch(err => setStatus('❌ Scanner error: ' + err.message));
+      ).catch(err => {
+        setStatus('❌ Scanner error: ' + err.message);
+        console.error(err);
+      });
     };
 
     startCamera();
@@ -129,13 +135,8 @@ export default function MobileScanPage() {
     setProduct(null);
     setScanned('');
     setStatus('Ready – scan again');
-    // Restart reader without resetting video
     if (readerRef.current && videoRef.current) {
-      readerRef.current.decodeFromConstraints(
-        { video: { facingMode: 'environment' } },
-        videoRef.current,
-        (result, err) => {}
-      );
+      readerRef.current.decodeFromVideoElement(videoRef.current, (result, err) => {});
     }
   };
 
@@ -144,7 +145,7 @@ export default function MobileScanPage() {
       <h1>📱 Mobile Barcode Scanner</h1>
       <p>{status}</p>
       <div style={{ background: '#000', borderRadius: '12px', overflow: 'hidden' }}>
-        <video ref={videoRef} style={{ width: '100%', height: 'auto' }} playsInline muted />
+        <video ref={videoRef} style={{ width: '100%', height: 'auto' }} playsInline muted autoPlay />
       </div>
       <div style={{ marginTop: '20px', padding: '16px', background: '#f9fafb', borderRadius: '8px' }}>
         <p><strong>Status:</strong> {status}</p>
