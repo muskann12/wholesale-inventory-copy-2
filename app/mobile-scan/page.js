@@ -5,12 +5,14 @@ import ProductPopup from '../components/ProductPopup';
 
 export default function MobileScanPage() {
   const videoRef = useRef(null);
+  const canvasRef = useRef(null);
   const inputRef = useRef(null);
   const [product, setProduct] = useState(null);
   const [status, setStatus] = useState('Starting camera...');
   const [scanned, setScanned] = useState('');
   const readerRef = useRef(null);
   const streamRef = useRef(null);
+  let scanInterval = null;
 
   useEffect(() => {
     let isMounted = true;
@@ -19,70 +21,68 @@ export default function MobileScanPage() {
 
     const startCamera = async () => {
       try {
-        // Stop any existing stream
         if (streamRef.current) {
           streamRef.current.getTracks().forEach(track => track.stop());
-          streamRef.current = null;
         }
-
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'environment' }
         });
         streamRef.current = stream;
-
         if (videoRef.current && isMounted) {
           videoRef.current.srcObject = stream;
-          videoRef.current.onloadedmetadata = () => {
-            if (videoRef.current && isMounted) {
-              videoRef.current.play().catch(err => console.warn('Play failed:', err));
-            }
-          };
-          if (videoRef.current.readyState >= 2) {
-            videoRef.current.play().catch(err => console.warn('Play failed:', err));
-          }
+          await videoRef.current.play();
           setStatus('Camera ready – scanning...');
-          startReader();
+          startScanning();
         }
       } catch (err) {
-        setStatus('❌ Camera access denied: ' + err.message);
+        setStatus('❌ Camera error: ' + err.message);
         console.error(err);
       }
     };
 
-    const startReader = () => {
-      if (!videoRef.current || !isMounted) return;
-
-      // Use decodeFromVideoElement for more reliable scanning
-      reader.decodeFromVideoElement(
-        videoRef.current,
-        (result, err) => {
+    const startScanning = () => {
+      if (scanInterval) clearInterval(scanInterval);
+      scanInterval = setInterval(async () => {
+        if (!videoRef.current || videoRef.current.readyState !== 4) return;
+        if (!canvasRef.current) return;
+        const canvas = canvasRef.current;
+        const context = canvas.getContext('2d');
+        canvas.width = videoRef.current.videoWidth;
+        canvas.height = videoRef.current.videoHeight;
+        if (canvas.width === 0 || canvas.height === 0) return;
+        context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+        try {
+          const result = await reader.decodeFromCanvas(canvas);
           if (result) {
             const barcodeValue = result.getText();
             setScanned(barcodeValue);
             setStatus(`✅ Scanned: ${barcodeValue}`);
-            reader.reset();
-            fetch(`/api/barcode?sku=${encodeURIComponent(barcodeValue)}`, { credentials: 'include' })
-              .then(res => res.ok ? res.json() : Promise.reject())
-              .then(data => setProduct(data))
-              .catch(() => alert('Product not found'));
-            // Restart scanning after a short delay
-            setTimeout(() => {
-              if (readerRef.current && videoRef.current) {
-                readerRef.current.decodeFromVideoElement(videoRef.current, (result, err) => {});
-              }
-            }, 500);
+            clearInterval(scanInterval);
+            const res = await fetch(`/api/barcode?sku=${encodeURIComponent(barcodeValue)}`, { credentials: 'include' });
+            if (res.ok) {
+              const data = await res.json();
+              setProduct(data);
+              setStatus('Product loaded – popup open');
+            } else {
+              setStatus('❌ Product not found');
+              setTimeout(() => {
+                setScanned('');
+                setStatus('Ready – scan again');
+                startScanning();
+              }, 2000);
+            }
           }
+        } catch (err) {
+          // No barcode found – ignore
         }
-      ).catch(err => {
-        setStatus('❌ Scanner error: ' + err.message);
-        console.error(err);
-      });
+      }, 150);
     };
 
     startCamera();
 
     return () => {
       isMounted = false;
+      if (scanInterval) clearInterval(scanInterval);
       if (readerRef.current) {
         try { readerRef.current.reset(); } catch (e) {}
       }
@@ -92,10 +92,39 @@ export default function MobileScanPage() {
       }
       if (videoRef.current) {
         videoRef.current.srcObject = null;
-        videoRef.current.onloadedmetadata = null;
       }
     };
   }, []);
+
+  // Manual capture button
+  const captureNow = async () => {
+    if (!videoRef.current) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const context = canvas.getContext('2d');
+    canvas.width = videoRef.current.videoWidth;
+    canvas.height = videoRef.current.videoHeight;
+    context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+    try {
+      const result = await readerRef.current.decodeFromCanvas(canvas);
+      if (result) {
+        const barcodeValue = result.getText();
+        setScanned(barcodeValue);
+        setStatus(`✅ Manual capture: ${barcodeValue}`);
+        const res = await fetch(`/api/barcode?sku=${encodeURIComponent(barcodeValue)}`, { credentials: 'include' });
+        if (res.ok) {
+          const data = await res.json();
+          setProduct(data);
+        } else {
+          setStatus('❌ Product not found');
+        }
+      } else {
+        setStatus('❌ No barcode in captured frame');
+      }
+    } catch (err) {
+      setStatus('❌ Decode failed: ' + err.message);
+    }
+  };
 
   const handleManualSubmit = async (e) => {
     const sku = e.target.value.trim();
@@ -135,9 +164,42 @@ export default function MobileScanPage() {
     setProduct(null);
     setScanned('');
     setStatus('Ready – scan again');
-    if (readerRef.current && videoRef.current) {
-      readerRef.current.decodeFromVideoElement(videoRef.current, (result, err) => {});
-    }
+    // Restart scanning
+    const startScanning = () => {
+      if (scanInterval) clearInterval(scanInterval);
+      scanInterval = setInterval(async () => {
+        if (!videoRef.current || videoRef.current.readyState !== 4) return;
+        if (!canvasRef.current) return;
+        const canvas = canvasRef.current;
+        const context = canvas.getContext('2d');
+        canvas.width = videoRef.current.videoWidth;
+        canvas.height = videoRef.current.videoHeight;
+        if (canvas.width === 0 || canvas.height === 0) return;
+        context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+        try {
+          const result = await readerRef.current.decodeFromCanvas(canvas);
+          if (result) {
+            const barcodeValue = result.getText();
+            setScanned(barcodeValue);
+            setStatus(`✅ Scanned: ${barcodeValue}`);
+            clearInterval(scanInterval);
+            const res = await fetch(`/api/barcode?sku=${encodeURIComponent(barcodeValue)}`, { credentials: 'include' });
+            if (res.ok) {
+              const data = await res.json();
+              setProduct(data);
+            } else {
+              setStatus('❌ Product not found');
+              setTimeout(() => {
+                setScanned('');
+                setStatus('Ready – scan again');
+                startScanning();
+              }, 2000);
+            }
+          }
+        } catch (err) {}
+      }, 150);
+    };
+    startScanning();
   };
 
   return (
@@ -145,7 +207,13 @@ export default function MobileScanPage() {
       <h1>📱 Mobile Barcode Scanner</h1>
       <p>{status}</p>
       <div style={{ background: '#000', borderRadius: '12px', overflow: 'hidden' }}>
-        <video ref={videoRef} style={{ width: '100%', height: 'auto' }} playsInline muted autoPlay />
+        <video ref={videoRef} style={{ width: '100%', height: 'auto' }} playsInline muted />
+        <canvas ref={canvasRef} style={{ display: 'none' }} />
+      </div>
+      <div style={{ marginTop: '10px', display: 'flex', gap: '10px' }}>
+        <button onClick={captureNow} style={{ padding: '10px', background: '#f59e0b', color: '#000', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+          📸 Capture & Decode
+        </button>
       </div>
       <div style={{ marginTop: '20px', padding: '16px', background: '#f9fafb', borderRadius: '8px' }}>
         <p><strong>Status:</strong> {status}</p>
